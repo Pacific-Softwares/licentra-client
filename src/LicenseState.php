@@ -1,6 +1,6 @@
 <?php
 
-namespace Ishalabs\Licentra;
+namespace Pacific\Licentra;
 
 /** Everything a product needs to render license UI, computed offline from the stored token. */
 final class LicenseState

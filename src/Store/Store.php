@@ -1,6 +1,6 @@
 <?php
 
-namespace Ishalabs\Licentra\Store;
+namespace Pacific\Licentra\Store;
 
 interface Store
 {

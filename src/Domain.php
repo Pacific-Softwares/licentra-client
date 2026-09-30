@@ -1,6 +1,6 @@
 <?php
 
-namespace Ishalabs\Licentra;
+namespace Pacific\Licentra;
 
 /** Mirrors licentra-server app/Licentra/DomainRules.php. Keep both in sync. */
 final class Domain

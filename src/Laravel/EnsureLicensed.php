@@ -1,10 +1,10 @@
 <?php
 
-namespace Ishalabs\Licentra\Laravel;
+namespace Pacific\Licentra\Laravel;
 
 use Closure;
 use Illuminate\Http\Request;
-use Ishalabs\Licentra\Licentra;
+use Pacific\Licentra\Licentra;
 use Symfony\Component\HttpFoundation\Response;
 
 /**

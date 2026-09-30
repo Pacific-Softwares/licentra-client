@@ -1,10 +1,10 @@
 {
-    "name": "ishalabs/licentra-client",
+    "name": "pacific/licentra-client",
     "description": "License activation and install telemetry client for Isha Labs products (Envato purchase codes).",
     "type": "library",
     "license": "MIT",
     "keywords": ["envato", "codecanyon", "license", "purchase-code", "laravel"],
-    "homepage": "https://licentra.ishalabs.com",
+    "homepage": "https://github.com/Pacific-Softwares/licentra-client",
     "authors": [
         { "name": "Isha Labs", "homepage": "https://ishalabs.com" }
     ],
@@ -22,15 +22,15 @@
         "laravel/framework": "Auto-registers the service provider, middleware, scheduler and activation page"
     },
     "autoload": {
-        "psr-4": { "Ishalabs\\Licentra\\": "src/" }
+        "psr-4": { "Pacific\\Licentra\\": "src/" }
     },
     "autoload-dev": {
-        "psr-4": { "Ishalabs\\Licentra\\Tests\\": "tests/" }
+        "psr-4": { "Pacific\\Licentra\\Tests\\": "tests/" }
     },
     "extra": {
         "laravel": {
-            "providers": ["Ishalabs\\Licentra\\Laravel\\LicentraServiceProvider"],
-            "aliases": { "Licentra": "Ishalabs\\Licentra\\Laravel\\Facades\\Licentra" }
+            "providers": ["Pacific\\Licentra\\Laravel\\LicentraServiceProvider"],
+            "aliases": { "Licentra": "Pacific\\Licentra\\Laravel\\Facades\\Licentra" }
         }
     },
     "config": { "sort-packages": true },

@@ -1,6 +1,6 @@
 <?php
 
-namespace Ishalabs\Licentra\Exceptions;
+namespace Pacific\Licentra\Exceptions;
 
 class LicentraException extends \RuntimeException
 {

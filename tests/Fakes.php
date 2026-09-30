@@ -1,11 +1,11 @@
 <?php
 
-namespace Ishalabs\Licentra\Tests;
+namespace Pacific\Licentra\Tests;
 
-use Ishalabs\Licentra\Exceptions\ServerUnreachable;
-use Ishalabs\Licentra\Http\Response;
-use Ishalabs\Licentra\Http\Transport;
-use Ishalabs\Licentra\Store\Store;
+use Pacific\Licentra\Exceptions\ServerUnreachable;
+use Pacific\Licentra\Http\Response;
+use Pacific\Licentra\Http\Transport;
+use Pacific\Licentra\Store\Store;
 
 final class MemoryStore implements Store
 {
@@ -80,6 +80,6 @@ class ReadOnlyStore implements Store
 
     public function write(array $data): void
     {
-        throw new \Ishalabs\Licentra\Exceptions\LicentraException('read-only');
+        throw new \Pacific\Licentra\Exceptions\LicentraException('read-only');
     }
 }

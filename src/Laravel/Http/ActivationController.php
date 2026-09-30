@@ -1,13 +1,13 @@
 <?php
 
-namespace Ishalabs\Licentra\Laravel\Http;
+namespace Pacific\Licentra\Laravel\Http;
 
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
-use Ishalabs\Licentra\Exceptions\ActivationFailed;
-use Ishalabs\Licentra\Exceptions\LicentraException;
-use Ishalabs\Licentra\Exceptions\ServerUnreachable;
-use Ishalabs\Licentra\Licentra;
+use Pacific\Licentra\Exceptions\ActivationFailed;
+use Pacific\Licentra\Exceptions\LicentraException;
+use Pacific\Licentra\Exceptions\ServerUnreachable;
+use Pacific\Licentra\Licentra;
 
 class ActivationController extends Controller
 {

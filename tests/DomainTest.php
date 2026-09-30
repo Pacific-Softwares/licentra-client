@@ -1,8 +1,8 @@
 <?php
 
-namespace Ishalabs\Licentra\Tests;
+namespace Pacific\Licentra\Tests;
 
-use Ishalabs\Licentra\Domain;
+use Pacific\Licentra\Domain;
 use PHPUnit\Framework\TestCase;
 
 final class DomainTest extends TestCase

@@ -1,4 +1,4 @@
-# ishalabs/licentra-client
+# pacific/licentra-client
 
 License activation for Isha Labs products (Quizora, Slotara, Matterly, ...). Verifies Envato
 purchase codes through the Licentra server and keeps a signed license token that is checked
@@ -11,7 +11,7 @@ purchase codes through the Licentra server and keeps a signed license token that
 ## Laravel: adding it to a product (5 minutes)
 
 ```bash
-composer require ishalabs/licentra-client
+composer require pacific/licentra-client
 php artisan vendor:publish --tag=licentra-config
 ```
 
@@ -41,8 +41,8 @@ Unlicensed admins are redirected to the built-in page at `/license` (enter code,
 release domain). To use your own installer step instead:
 
 ```php
-use Ishalabs\Licentra\Exceptions\{ActivationFailed, ServerUnreachable};
-use Ishalabs\Licentra\Laravel\Facades\Licentra;
+use Pacific\Licentra\Exceptions\{ActivationFailed, ServerUnreachable};
+use Pacific\Licentra\Laravel\Facades\Licentra;
 
 try {
     $state = Licentra::activate($request->purchase_code);
@@ -76,7 +76,7 @@ so buyers who never set up cron are still covered.
 ## Plain PHP
 
 ```php
-$licentra = new Ishalabs\Licentra\Licentra(new Ishalabs\Licentra\Config(
+$licentra = new Pacific\Licentra\Licentra(new Pacific\Licentra\Config(
     product: 'quizora',
     publicKey: 'BASE64_PUBLIC_KEY',
     storagePath: __DIR__ . '/storage/licentra.json',

@@ -2,7 +2,7 @@
     Optional notice for your admin layout:  @include('licentra::banner')
     Shows update-available and support-ending notices. Restyle by publishing views.
 --}}
-@php($licentraState = app(\Ishalabs\Licentra\Licentra::class)->state())
+@php($licentraState = app(\Pacific\Licentra\Licentra::class)->state())
 @if ($licentraState->updateAvailable())
     <div role="status" style="padding:8px 14px;background:#eef2ff;color:#3730a3;font-size:14px">
         {{ config('app.name') }} {{ $licentraState->update['version'] }} is available.

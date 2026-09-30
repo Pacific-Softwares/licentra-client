@@ -1,6 +1,6 @@
 <?php
 
-namespace Ishalabs\Licentra\Exceptions;
+namespace Pacific\Licentra\Exceptions;
 
 /**
  * The server refused the request. `$errorCode` is one of the server's v1 codes

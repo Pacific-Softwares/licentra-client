@@ -1,9 +1,9 @@
 <?php
 
-namespace Ishalabs\Licentra\Laravel;
+namespace Pacific\Licentra\Laravel;
 
 use Illuminate\Console\Command;
-use Ishalabs\Licentra\Licentra;
+use Pacific\Licentra\Licentra;
 
 class HeartbeatCommand extends Command
 {

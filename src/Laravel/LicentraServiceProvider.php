@@ -1,14 +1,14 @@
 <?php
 
-namespace Ishalabs\Licentra\Laravel;
+namespace Pacific\Licentra\Laravel;
 
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Auth\Access\Response as GateResponse;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
-use Ishalabs\Licentra\Config;
-use Ishalabs\Licentra\Licentra;
+use Pacific\Licentra\Config;
+use Pacific\Licentra\Licentra;
 
 class LicentraServiceProvider extends ServiceProvider
 {

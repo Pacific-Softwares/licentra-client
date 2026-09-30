@@ -1,6 +1,6 @@
 <?php
 
-namespace Ishalabs\Licentra\Http;
+namespace Pacific\Licentra\Http;
 
 final class Response
 {

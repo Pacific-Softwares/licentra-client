@@ -1,6 +1,6 @@
 <?php
 
-namespace Ishalabs\Licentra;
+namespace Pacific\Licentra;
 
 enum Status: string
 {

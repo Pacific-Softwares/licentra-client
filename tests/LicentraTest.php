@@ -1,14 +1,14 @@
 <?php
 
-namespace Ishalabs\Licentra\Tests;
+namespace Pacific\Licentra\Tests;
 
-use Ishalabs\Licentra\Config;
-use Ishalabs\Licentra\Exceptions\ActivationFailed;
-use Ishalabs\Licentra\Exceptions\LicentraException;
-use Ishalabs\Licentra\Exceptions\ServerUnreachable;
-use Ishalabs\Licentra\Http\Response;
-use Ishalabs\Licentra\Licentra;
-use Ishalabs\Licentra\Status;
+use Pacific\Licentra\Config;
+use Pacific\Licentra\Exceptions\ActivationFailed;
+use Pacific\Licentra\Exceptions\LicentraException;
+use Pacific\Licentra\Exceptions\ServerUnreachable;
+use Pacific\Licentra\Http\Response;
+use Pacific\Licentra\Licentra;
+use Pacific\Licentra\Status;
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/Fakes.php';
@@ -71,7 +71,7 @@ final class LicentraTest extends TestCase
         $this->assertSame('shop-one.com', $state->domain);
         $this->assertSame('86781236-23d0-4b3c-7dfa-c1c147e0dece', $this->http->sent[0]['body']['purchase_code']);
         $this->assertSame('quizora', $this->http->sent[0]['body']['product']);
-        $this->assertSame('https://licentra.ishalabs.com/api/v1/activate', $this->http->sent[0]['url']);
+        $this->assertSame('https://licentra.pacificsoftwares.com/api/v1/activate', $this->http->sent[0]['url']);
         $this->assertTrue($state->updateAvailable());
         $this->assertTrue($state->supportActive());
         $this->assertTrue($state->supportEndingSoon());
@@ -262,7 +262,7 @@ final class LicentraTest extends TestCase
 
     public function test_heartbeat_skipped_when_storage_is_unwritable(): void
     {
-        $store = new class extends \Ishalabs\Licentra\Tests\ReadOnlyStore {};
+        $store = new class extends \Pacific\Licentra\Tests\ReadOnlyStore {};
         $store->data = ['instance_id' => 'iid-1', 'token' => $this->signer->token(), 'last_heartbeat_at' => 0];
         $client = new Licentra(new Config('quizora', $this->signer->public, '/x', 'https://shop-one.com'), $store, $this->http);
 

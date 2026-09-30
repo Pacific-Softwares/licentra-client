@@ -1,8 +1,8 @@
 <?php
 
-namespace Ishalabs\Licentra\Store;
+namespace Pacific\Licentra\Store;
 
-use Ishalabs\Licentra\Exceptions\LicentraException;
+use Pacific\Licentra\Exceptions\LicentraException;
 
 final class FileStore implements Store
 {

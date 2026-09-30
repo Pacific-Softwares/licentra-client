@@ -1,8 +1,8 @@
 <?php
 
-namespace Ishalabs\Licentra\Http;
+namespace Pacific\Licentra\Http;
 
-use Ishalabs\Licentra\Exceptions\ServerUnreachable;
+use Pacific\Licentra\Exceptions\ServerUnreachable;
 
 interface Transport
 {

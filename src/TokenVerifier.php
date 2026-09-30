@@ -1,6 +1,6 @@
 <?php
 
-namespace Ishalabs\Licentra;
+namespace Pacific\Licentra;
 
 /**
  * Verifies tokens from licentra-server app/Licentra/TokenSigner.php:

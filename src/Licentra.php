@@ -1,14 +1,14 @@
 <?php
 
-namespace Ishalabs\Licentra;
+namespace Pacific\Licentra;
 
-use Ishalabs\Licentra\Exceptions\ActivationFailed;
-use Ishalabs\Licentra\Exceptions\LicentraException;
-use Ishalabs\Licentra\Exceptions\ServerUnreachable;
-use Ishalabs\Licentra\Http\StreamTransport;
-use Ishalabs\Licentra\Http\Transport;
-use Ishalabs\Licentra\Store\FileStore;
-use Ishalabs\Licentra\Store\Store;
+use Pacific\Licentra\Exceptions\ActivationFailed;
+use Pacific\Licentra\Exceptions\LicentraException;
+use Pacific\Licentra\Exceptions\ServerUnreachable;
+use Pacific\Licentra\Http\StreamTransport;
+use Pacific\Licentra\Http\Transport;
+use Pacific\Licentra\Store\FileStore;
+use Pacific\Licentra\Store\Store;
 
 /**
  * Client for the Licentra license server.

@@ -1,12 +1,12 @@
 <?php
 
-namespace Ishalabs\Licentra\Tests;
+namespace Pacific\Licentra\Tests;
 
 use Illuminate\Foundation\Auth\User;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
-use Ishalabs\Licentra\Laravel\LicentraServiceProvider;
-use Ishalabs\Licentra\Licentra;
+use Pacific\Licentra\Laravel\LicentraServiceProvider;
+use Pacific\Licentra\Licentra;
 use Orchestra\Testbench\TestCase;
 
 require_once __DIR__ . '/Fakes.php';

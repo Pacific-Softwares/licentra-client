@@ -15,7 +15,7 @@ return [
     // Your product's version, e.g. config('app.version') or trim(file_get_contents(base_path('VERSION'))).
     'product_version' => env('LICENTRA_PRODUCT_VERSION', '0.0.0'),
 
-    'server_url' => 'https://licentra.ishalabs.com',
+    'server_url' => 'https://licentra.pacificsoftwares.com',
 
     'storage_path' => storage_path('app/licentra.json'),
 

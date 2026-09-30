@@ -1,6 +1,6 @@
 <?php
 
-namespace Ishalabs\Licentra;
+namespace Pacific\Licentra;
 
 final class Config
 {
@@ -16,7 +16,7 @@ final class Config
         public readonly string $storagePath,
         public readonly string $appUrl,
         public readonly string $productVersion = '0.0.0',
-        public readonly string $serverUrl = 'https://licentra.ishalabs.com',
+        public readonly string $serverUrl = 'https://licentra.pacificsoftwares.com',
         public readonly ?string $frameworkVersion = null,
         public readonly int $timeout = 8,
         public readonly int $heartbeatEveryHours = 24,

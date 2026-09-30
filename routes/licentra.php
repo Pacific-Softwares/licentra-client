@@ -1,7 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Ishalabs\Licentra\Laravel\Http\ActivationController;
+use Pacific\Licentra\Laravel\Http\ActivationController;
 
 Route::middleware([...config('licentra.route_middleware'), 'can:'.config('licentra.gate')])
     ->prefix(config('licentra.route_prefix'))
