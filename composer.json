@@ -21,6 +21,7 @@
         "ext-curl": "Faster, more reliable HTTP (falls back to PHP streams)",
         "laravel/framework": "Auto-registers the service provider, middleware, scheduler and activation page"
     },
+    "bin": ["bin/licentra-release"],
     "autoload": {
         "psr-4": { "Pacific\\Licentra\\": "src/" }
     },

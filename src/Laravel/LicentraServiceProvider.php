@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Pacific\Licentra\Config;
 use Pacific\Licentra\Licentra;
+use Pacific\Licentra\Update\Updater;
 
 class LicentraServiceProvider extends ServiceProvider
 {
@@ -28,6 +29,21 @@ class LicentraServiceProvider extends ServiceProvider
                 serverUrl: $c['server_url'],
                 frameworkVersion: $app->version(),
             ));
+        });
+
+        $this->app->singleton(Updater::class, function ($app) {
+            $c = $app['config']['licentra'];
+            $u = $c['update'] ?? [];
+
+            return new Updater(
+                $app->make(Licentra::class),
+                $app->make($u['hooks'] ?? LaravelUpdateHooks::class),
+                base_path(),
+                $u['work_path'] ?? storage_path('app/licentra-update'),
+                $c['release_public_key'] ?? null,
+                $u['preserve'] ?? [],
+                $u['merge_json'] ?? [],
+            );
         });
     }
 
@@ -53,8 +69,14 @@ class LicentraServiceProvider extends ServiceProvider
             $this->loadRoutesFrom(__DIR__ . '/../../routes/licentra.php');
         }
 
+        if (!$this->app->runningInConsole()) {
+            // Files of an update are in place but migrations etc. haven't run (the admin closed the tab,
+            // or this is the next request). Finish now, with the new code loaded, before anything else.
+            $this->app->booted(fn () => $this->finishPendingUpdate());
+        }
+
         if ($this->app->runningInConsole()) {
-            $this->commands([HeartbeatCommand::class]);
+            $this->commands([HeartbeatCommand::class, UpdateCommand::class]);
 
             $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
                 // Fixed per-site minute (not random: schedule:run re-evaluates every minute) so
@@ -62,6 +84,20 @@ class LicentraServiceProvider extends ServiceProvider
                 $minute = crc32((string) config('app.url')) % 1440;
                 $schedule->command('licentra:heartbeat')->dailyAt(sprintf('%02d:%02d', intdiv($minute, 60), $minute % 60));
             });
+        }
+    }
+
+    /** Cheap when idle: one is_file() check. */
+    public function finishPendingUpdate(): void
+    {
+        $work = config('licentra.update.work_path', storage_path('app/licentra-update'));
+        if (!is_file($work . '/state.json')) {
+            return;
+        }
+        try {
+            $this->app->make(Updater::class)->finishIfPending();
+        } catch (\Throwable $e) {
+            report($e);
         }
     }
 }

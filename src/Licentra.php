@@ -5,6 +5,7 @@ namespace Pacific\Licentra;
 use Pacific\Licentra\Exceptions\ActivationFailed;
 use Pacific\Licentra\Exceptions\LicentraException;
 use Pacific\Licentra\Exceptions\ServerUnreachable;
+use Pacific\Licentra\Http\Downloader;
 use Pacific\Licentra\Http\StreamTransport;
 use Pacific\Licentra\Http\Transport;
 use Pacific\Licentra\Store\FileStore;
@@ -36,6 +37,7 @@ final class Licentra
 
     private readonly Store $store;
     private readonly Transport $http;
+    private readonly Downloader $downloader;
     private readonly TokenVerifier $verifier;
     private ?LicenseState $cached = null;
 
@@ -43,9 +45,11 @@ final class Licentra
         private readonly Config $config,
         ?Store $store = null,
         ?Transport $http = null,
+        ?Downloader $downloader = null,
     ) {
         $this->store = $store ?? new FileStore($config->storagePath);
         $this->http = $http ?? new StreamTransport();
+        $this->downloader = $downloader ?? ($this->http instanceof Downloader ? $this->http : new StreamTransport());
         $this->verifier = new TokenVerifier($config->publicKey);
     }
 
@@ -159,6 +163,41 @@ final class Licentra
 
         $this->store->write(array_intersect_key($stored, ['request_host' => true]));
         $this->cached = null;
+    }
+
+    /**
+     * Download a published release zip for this install to $destination. The server applies
+     * the heartbeat checks first, so only a licensed install on its own domain gets the file.
+     * Verify it with Update\ReleaseSignature before using it.
+     *
+     * @throws ActivationFailed|ServerUnreachable
+     */
+    public function downloadRelease(string $version, string $destination, int $timeout = 600): void
+    {
+        $stored = $this->store->read();
+        if (empty($stored['instance_id'])) {
+            throw new ActivationFailed('not_activated', 'Activate this installation before updating it.');
+        }
+
+        $res = $this->downloader->download(
+            rtrim($this->config->serverUrl, '/') . '/api/v1/updates/download',
+            ['instance_id' => $stored['instance_id'], 'version' => $version] + $this->installInfo(),
+            $destination,
+            $timeout,
+        );
+
+        if ($res->status === 200) {
+            return;
+        }
+        if ($res->status >= 500 || $res->json === null) {
+            throw new ServerUnreachable("License server error while downloading (HTTP {$res->status}). Try again in a few minutes.");
+        }
+        throw new ActivationFailed($res->json['error'] ?? 'download_failed', $res->json['message'] ?? 'Download failed.', $res->status);
+    }
+
+    public function config(): Config
+    {
+        return $this->config;
     }
 
     private function computeState(): LicenseState

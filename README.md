@@ -74,6 +74,51 @@ $state->updateAvailable(); $state->update['version'];
 The heartbeat runs daily through the scheduler, and also after the response on admin requests,
 so buyers who never set up cron are still covered.
 
+## One-click updates
+
+Admins update from `/license/update` (or `php artisan licentra:update`). Each release is signed
+on **your** machine, so even a compromised license server can't push code to buyers' sites.
+
+**Once per author** (the key signs releases of all your products; back it up):
+
+```bash
+vendor/bin/licentra-release keygen          # ~/.config/licentra/release.key, prints the public key
+echo "TOKEN" > ~/.config/licentra/upload-token   # LICENTRA_UPLOAD_TOKEN from the license server's .env
+```
+
+**Once per product**, in `config/licentra.php`:
+
+```php
+'release_public_key' => 'PUBLIC_KEY_FROM_KEYGEN',
+'update' => [
+    'work_path' => storage_path('app/licentra-update'),
+    'preserve' => ['.env', 'storage/*', 'bootstrap/cache/*', 'public/storage', 'public/hot'],
+    'merge_json' => ['lang/*.json'],     // translations admins edit: new keys added, theirs kept
+    'hooks' => \App\Support\UpdateHooks::class, // optional: extend LaravelUpdateHooks, e.g. DB backup
+],
+```
+
+**Every release**, from your build script:
+
+```bash
+vendor/bin/licentra-release manifest build/myapp --version=1.8.0   # before zipping
+vendor/bin/licentra-release upload dist/myapp-1.8.0.zip --product=myapp --version=1.8.0 --changelog=CHANGES.txt
+```
+
+Then click **Publish** in the license server's **Releases** page. Installs see it at their next daily
+check. How an update runs:
+
+1. Download (only for licensed installs), then check SHA-256 and your signature
+2. Work out what changes from the manifests: only changed files are written, files a release
+   dropped are deleted (unless the buyer edited them), `preserve` paths are never touched
+3. Back up every file that will change, check they're all writable and there's disk space
+4. Maintenance mode on (the admin keeps a bypass cookie), swap files, `opcache_reset()`
+5. Next request, with the new code loaded: `migrate --force`, `optimize:clear`, `queue:restart`, `up`.
+   This also runs automatically on the next request if the admin closed the tab
+
+Any failure while swapping files or migrating puts the old files back and leaves maintenance mode.
+Updates require a valid license, never active support: Envato buyers get updates for life.
+
 ## Plain PHP
 
 ```php

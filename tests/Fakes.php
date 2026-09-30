@@ -83,3 +83,53 @@ class ReadOnlyStore implements Store
         throw new \Pacific\Licentra\Exceptions\LicentraException('read-only');
     }
 }
+
+/** Serves a prepared zip as if the license server had streamed it. */
+final class FakeDownloader implements \Pacific\Licentra\Http\Downloader
+{
+    public ?string $zip = null;
+
+    public int $status = 200;
+
+    public ?array $error = null;
+
+    /** @var list<array{url: string, body: array}> */
+    public array $sent = [];
+
+    public function download(string $url, array $body, string $destination, int $timeout): Response
+    {
+        $this->sent[] = compact('url', 'body');
+        if ($this->status !== 200) {
+            return new Response($this->status, $this->error);
+        }
+        copy($this->zip, $destination);
+
+        return new Response(200, null);
+    }
+}
+
+/** Records hook calls; can be told to fail in finish() to exercise rollback. */
+final class RecordingHooks implements \Pacific\Licentra\Update\UpdateHooks
+{
+    public array $calls = [];
+
+    public bool $failFinish = false;
+
+    public function beforeApply(\Pacific\Licentra\Update\Updater $updater): void
+    {
+        $this->calls[] = 'beforeApply';
+    }
+
+    public function finish(\Pacific\Licentra\Update\Updater $updater): void
+    {
+        $this->calls[] = 'finish';
+        if ($this->failFinish) {
+            throw new \RuntimeException('migration exploded');
+        }
+    }
+
+    public function afterRollback(\Pacific\Licentra\Update\Updater $updater): void
+    {
+        $this->calls[] = 'afterRollback';
+    }
+}

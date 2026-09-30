@@ -1,0 +1,193 @@
+#!/usr/bin/env php
+<?php
+
+/*
+ * Release tooling for product authors (runs on YOUR machine, never on buyers' servers).
+ *
+ *   licentra-release keygen                       create the release signing key (once)
+ *   licentra-release pubkey                       print its public key for config/licentra.php
+ *   licentra-release manifest <dir> --version=X   write <dir>/.licentra-manifest.json (before zipping)
+ *   licentra-release sign <zip> --product=P --version=X
+ *   licentra-release upload <zip> --product=P --version=X [--changelog=FILE] [--server=URL] [--chunk-mb=5]
+ *
+ * Key file:     $LICENTRA_RELEASE_KEY or ~/.config/licentra/release.key
+ * Upload token: $LICENTRA_UPLOAD_TOKEN or ~/.config/licentra/upload-token
+ */
+
+use Pacific\Licentra\Update\Manifest;
+use Pacific\Licentra\Update\ReleaseSignature;
+
+foreach ([__DIR__ . '/../../../autoload.php', __DIR__ . '/../vendor/autoload.php'] as $autoload) {
+    if (is_file($autoload)) {
+        require $autoload;
+        break;
+    }
+}
+
+function fail(string $message): never
+{
+    fwrite(STDERR, "✗ {$message}\n");
+    exit(1);
+}
+
+function option(array $argv, string $name, ?string $default = null): ?string
+{
+    foreach ($argv as $arg) {
+        if (str_starts_with($arg, "--{$name}=")) {
+            return substr($arg, strlen($name) + 3);
+        }
+    }
+
+    return $default;
+}
+
+function required(array $argv, string $name): string
+{
+    return option($argv, $name) ?? fail("--{$name}=... is required.");
+}
+
+function configDir(): string
+{
+    return (getenv('HOME') ?: getenv('USERPROFILE') ?: '.') . '/.config/licentra';
+}
+
+function keyFile(): string
+{
+    return getenv('LICENTRA_RELEASE_KEY') ?: configDir() . '/release.key';
+}
+
+function secretKey(): string
+{
+    $file = keyFile();
+    if (!is_file($file)) {
+        fail("No release key at {$file}. Run: licentra-release keygen");
+    }
+
+    return trim((string) file_get_contents($file));
+}
+
+function uploadToken(): string
+{
+    $token = getenv('LICENTRA_UPLOAD_TOKEN') ?: @file_get_contents(configDir() . '/upload-token');
+
+    return trim((string) $token) ?: fail('No upload token. Set LICENTRA_UPLOAD_TOKEN or save it to ' . configDir() . '/upload-token');
+}
+
+function request(string $method, string $url, string $token, string $body, string $contentType): array
+{
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_CUSTOMREQUEST => $method,
+        CURLOPT_POSTFIELDS => $body,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ["Authorization: Bearer {$token}", "Content-Type: {$contentType}", 'Accept: application/json'],
+        CURLOPT_CONNECTTIMEOUT => 15,
+        CURLOPT_TIMEOUT => 300,
+    ]);
+    $raw = curl_exec($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    if ($raw === false) {
+        fail("Request to {$url} failed: {$error}");
+    }
+
+    return [$status, json_decode((string) $raw, true) ?? ['message' => substr((string) $raw, 0, 300)]];
+}
+
+$command = $argv[1] ?? 'help';
+$args = array_slice($argv, 2);
+$positional = array_values(array_filter($args, fn ($a) => !str_starts_with($a, '--')));
+
+switch ($command) {
+    case 'keygen':
+        $file = keyFile();
+        if (is_file($file)) {
+            fail("A release key already exists at {$file}. Replacing it would stop every shipped product from accepting your updates.");
+        }
+        @mkdir(dirname($file), 0700, true);
+        $pair = ReleaseSignature::generateKeyPair();
+        file_put_contents($file, $pair['secret'] . "\n");
+        chmod($file, 0600);
+        echo "Release key saved to {$file} (keep it private and back it up).\n\n";
+        echo "Public key, for each product's config/licentra.php 'release_public_key':\n{$pair['public']}\n";
+        break;
+
+    case 'pubkey':
+        echo ReleaseSignature::publicKeyFor(secretKey()) . "\n";
+        break;
+
+    case 'manifest':
+        $dir = $positional[0] ?? fail('Usage: licentra-release manifest <dir> --version=X');
+        is_dir($dir) || fail("{$dir} is not a directory.");
+        $manifest = Manifest::build($dir, option($args, 'version'));
+        $manifest->write(rtrim($dir, '/') . '/' . Manifest::FILE);
+        echo 'Manifest: ' . count($manifest->files) . " files\n";
+        break;
+
+    case 'sign':
+        $zip = $positional[0] ?? fail('Usage: licentra-release sign <zip> --product=P --version=X');
+        is_file($zip) || fail("{$zip} not found.");
+        $sha = hash_file('sha256', $zip);
+        echo json_encode([
+            'sha256' => $sha,
+            'signature' => ReleaseSignature::sign(secretKey(), required($args, 'product'), required($args, 'version'), $sha),
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+        break;
+
+    case 'upload':
+        $zip = $positional[0] ?? fail('Usage: licentra-release upload <zip> --product=P --version=X');
+        is_file($zip) || fail("{$zip} not found.");
+        function_exists('curl_init') || fail('The curl PHP extension is required for uploads.');
+        $product = required($args, 'product');
+        $version = required($args, 'version');
+        $server = rtrim(option($args, 'server', 'https://licentra.pacificsoftwares.com'), '/');
+        $chunkBytes = (int) (((float) option($args, 'chunk-mb', '5')) * 1024 * 1024);
+        $changelogFile = option($args, 'changelog');
+        $token = uploadToken();
+
+        $sha = hash_file('sha256', $zip);
+        $signature = ReleaseSignature::sign(secretKey(), $product, $version, $sha);
+        $size = filesize($zip);
+        $chunks = (int) ceil($size / $chunkBytes);
+        echo "Uploading {$product} {$version} (" . round($size / 1048576, 1) . " MB, {$chunks} chunks) to {$server}\n";
+
+        $in = fopen($zip, 'rb');
+        for ($i = 0; $i < $chunks; $i++) {
+            $bytes = fread($in, $chunkBytes);
+            for ($try = 1; ; $try++) {
+                [$status, $json] = request('PUT', "{$server}/api/v1/releases/{$product}/{$version}/chunks/{$i}", $token, $bytes, 'application/octet-stream');
+                if ($status === 200) {
+                    break;
+                }
+                if ($try >= 3 || $status < 500) {
+                    fail("Chunk {$i} failed (HTTP {$status}): " . ($json['message'] ?? ''));
+                }
+                sleep(2);
+            }
+            printf("\r  %d/%d chunks", $i + 1, $chunks);
+        }
+        fclose($in);
+        echo "\n";
+
+        $payload = json_encode([
+            'chunks' => $chunks,
+            'sha256' => $sha,
+            'signature' => $signature,
+            'changelog' => $changelogFile ? (string) file_get_contents($changelogFile) : null,
+        ]);
+        [$status, $json] = request('POST', "{$server}/api/v1/releases/{$product}/{$version}", $token, $payload, 'application/json');
+        $status === 201 || fail("Finishing the upload failed (HTTP {$status}): " . ($json['message'] ?? json_encode($json)));
+
+        echo "✓ Uploaded as a draft. Publish it in {$server}/admin/releases\n";
+        break;
+
+    default:
+        echo <<<TXT
+        licentra-release keygen | pubkey | manifest <dir> --version=X
+                         | sign <zip> --product=P --version=X
+                         | upload <zip> --product=P --version=X [--changelog=FILE] [--server=URL] [--chunk-mb=5]
+
+        TXT;
+}
