@@ -17,10 +17,11 @@ final class DomainTest extends TestCase
 
     public function test_is_dev(): void
     {
-        foreach (['localhost', 'app.test', 'staging.shop.com', '192.168.0.4'] as $h) {
+        foreach (['localhost', 'app.test', 'app.local', '192.168.0.4', '10.1.2.3'] as $h) {
             $this->assertTrue(Domain::isDev($h), $h);
         }
-        foreach (['shop.com', 'devshop.com', '8.8.8.8'] as $h) {
+        // Staging-looking hosts are public sites: a copied token must not work there.
+        foreach (['shop.com', 'devshop.com', '8.8.8.8', 'staging.shop.com', 'dev.pirate.net'] as $h) {
             $this->assertFalse(Domain::isDev($h), $h);
         }
     }

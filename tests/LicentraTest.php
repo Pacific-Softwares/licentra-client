@@ -174,6 +174,7 @@ final class LicentraTest extends TestCase
 
         $this->assertSame(Status::DomainMismatch, $this->client('https://copycat.net')->state()->status);
         $this->assertSame(Status::Valid, $this->client('http://localhost:8000')->state()->status);
+        $this->assertSame(Status::DomainMismatch, $this->client('https://staging.copycat.net')->state()->status);
         $this->assertSame(Status::Valid, $this->client('https://www.shop-one.com/admin')->state()->status);
     }
 

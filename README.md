@@ -96,7 +96,9 @@ $licentra->heartbeat(); // once a day is plenty; it no-ops if called more often
 | License server down | Keeps working on the stored token (valid ~30 days, refreshed daily) |
 | Envato down during activation | Activates as `pending`; confirmed in the background |
 | Site copied to another live domain | `DomainMismatch`: admin asks to activate for the new domain |
-| Site copied to localhost / `*.test` / `staging.*` | Works, doesn't use a production slot (max 3 dev installs) |
+| Site copied to localhost / `*.test` / private IP | Works offline; activating it uses a free dev slot (max 3), never a production slot |
+| Site copied to `staging.yourdomain.com` | Asks to activate again; free next to the licensed `yourdomain.com` |
+| Site or token copied to someone else's `staging.*` / `dev.*` | Needs its own license, like any public domain |
 | `APP_URL=localhost` but served on a real domain | The real Host is what's licensed |
 | Refund / blocked by author | Admin locks at next heartbeat; public site unaffected |
 
