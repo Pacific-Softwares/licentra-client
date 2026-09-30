@@ -43,6 +43,7 @@ class LicentraServiceProvider extends ServiceProvider
                 $c['release_public_key'] ?? null,
                 $u['preserve'] ?? [],
                 $u['merge_json'] ?? [],
+                $u['merge_php'] ?? [],
             );
         });
     }

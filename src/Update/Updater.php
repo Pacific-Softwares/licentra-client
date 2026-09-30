@@ -41,6 +41,8 @@ final class Updater
         private readonly array $preserve = [],
         /** @var list<string> JSON files merged instead of replaced; existing values win, e.g. "lang/*.json" */
         private readonly array $mergeJson = [],
+        /** @var list<string> PHP files returning an array, deep-merged the same way, e.g. "lang/{locale}/{file}.php" patterns */
+        private readonly array $mergePhp = [],
     ) {
     }
 
@@ -268,7 +270,7 @@ final class Updater
             $target = $this->basePath . '/' . $path;
             $exists = is_file($target);
 
-            if ($exists && $this->matches($path, $this->mergeJson)) {
+            if ($exists && ($this->matches($path, $this->mergeJson) || $this->matches($path, $this->mergePhp))) {
                 $plan['merge'][] = $path;
             } elseif (!$exists) {
                 $plan['write'][] = $path;
@@ -334,7 +336,9 @@ final class Updater
                 $this->copyAtomic($root . '/' . $path, $this->basePath . '/' . $path);
             }
             foreach ($plan['merge'] as $path) {
-                $this->mergeJsonFile($root . '/' . $path, $this->basePath . '/' . $path);
+                $this->matches($path, $this->mergePhp)
+                    ? $this->mergePhpFile($root . '/' . $path, $this->basePath . '/' . $path)
+                    : $this->mergeJsonFile($root . '/' . $path, $this->basePath . '/' . $path);
             }
             foreach ($plan['delete'] as $path) {
                 if (!@unlink($this->basePath . '/' . $path)) {
@@ -474,6 +478,59 @@ final class Updater
             @unlink($tmp);
             throw new UpdateFailed("Could not write {$to}.");
         }
+    }
+
+    /**
+     * For PHP files that return an array (Laravel lang/{locale}/*.php). New keys from the release are
+     * added at any depth; values the site already has (e.g. translations edited in an admin UI) win.
+     */
+    private function mergePhpFile(string $from, string $to): void
+    {
+        $load = static function (string $file): ?array {
+            try {
+                $data = (static fn () => include $file)();
+            } catch (\Throwable) {
+                return null;
+            }
+
+            return is_array($data) ? $data : null;
+        };
+
+        $new = $load($from);
+        $current = $load($to);
+        if ($new === null || $current === null) {
+            if ($current === null && $new !== null) {
+                $this->copyAtomic($from, $to); // site's copy is broken: take the release's
+            }
+
+            return; // release copy is broken: keep the site's
+        }
+
+        $php = "<?php\n\nreturn " . self::exportArray(array_replace_recursive($new, $current)) . ";\n";
+        $tmp = $to . '.licentra-tmp';
+        if (@file_put_contents($tmp, $php) === false || !@rename($tmp, $to)) {
+            @unlink($tmp);
+            throw new UpdateFailed("Could not write {$to}.");
+        }
+        if (function_exists('opcache_invalidate')) {
+            @opcache_invalidate($to, true);
+        }
+    }
+
+    private static function exportArray(array $array, int $depth = 1): string
+    {
+        if ($array === []) {
+            return '[]';
+        }
+        $pad = str_repeat('    ', $depth);
+        $lines = [];
+        foreach ($array as $key => $value) {
+            $k = is_int($key) ? $key : var_export((string) $key, true);
+            $v = is_array($value) ? self::exportArray($value, $depth + 1) : var_export($value, true);
+            $lines[] = "{$pad}{$k} => {$v},";
+        }
+
+        return "[\n" . implode("\n", $lines) . "\n" . str_repeat('    ', $depth - 1) . ']';
     }
 
     private function fail(array $state, \Throwable $e): void

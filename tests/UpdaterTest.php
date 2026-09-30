@@ -131,6 +131,7 @@ final class UpdaterTest extends TestCase
             $releasePublicKey === 'default' ? $this->releaseKey['public'] : $releasePublicKey,
             preserve: ['.env', 'storage/*'],
             mergeJson: ['lang/*.json'],
+            mergePhp: ['lang/*/*.php'],
         );
     }
 
@@ -165,6 +166,37 @@ final class UpdaterTest extends TestCase
         $this->assertFileExists($this->tmp . '/work/backup-1.0.0.zip');
         $this->assertFileDoesNotExist($this->tmp . '/work/update-1.1.0.zip');
         $this->assertSame('iid-1', $this->downloader->sent[0]['body']['instance_id']);
+    }
+
+    public function test_php_translation_files_are_deep_merged(): void
+    {
+        // Site: buyer translated two strings (one nested) in the admin UI.
+        $this->files($this->base, ['lang/fr/admin.php' => "<?php\n\nreturn ['title' => 'Mon titre', 'nav' => ['users' => 'Membres', 'plans' => 'Plans'], 'quote' => \"L'équipe\"];\n"]);
+        // Release: English source for new keys at both levels.
+        $this->files($this->tmp . '/build/quizora', ['lang/fr/admin.php' => "<?php\n\nreturn ['title' => 'Title', 'nav' => ['users' => 'Users', 'plans' => 'Plans', 'coupons' => 'Coupons'], 'quote' => 'Team', 'new_key' => 'New'];\n"]);
+
+        $updater = $this->updater();
+        $updater->start('1.1.0');
+        $this->assertSame('done', $updater->runToFinish()['step']);
+
+        $merged = include $this->base . '/lang/fr/admin.php';
+        $this->assertSame([
+            'title' => 'Mon titre',
+            'nav' => ['users' => 'Membres', 'plans' => 'Plans', 'coupons' => 'Coupons'],
+            'quote' => "L'équipe",
+            'new_key' => 'New',
+        ], $merged);
+    }
+
+    public function test_broken_php_translation_on_the_site_is_replaced_by_the_release_copy(): void
+    {
+        $this->files($this->base, ['lang/fr/admin.php' => "<?php return ['oops' => ;"]);
+        $this->files($this->tmp . '/build/quizora', ['lang/fr/admin.php' => "<?php\n\nreturn ['title' => 'Title'];\n"]);
+
+        $updater = $this->updater();
+        $updater->start('1.1.0');
+        $this->assertSame('done', $updater->runToFinish()['step']);
+        $this->assertSame(['title' => 'Title'], include $this->base . '/lang/fr/admin.php');
     }
 
     public function test_file_the_buyer_changed_that_the_release_drops_is_kept(): void

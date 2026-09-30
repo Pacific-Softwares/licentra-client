@@ -94,6 +94,7 @@ echo "TOKEN" > ~/.config/licentra/upload-token   # LICENTRA_UPLOAD_TOKEN from th
     'work_path' => storage_path('app/licentra-update'),
     'preserve' => ['.env', 'storage/*', 'bootstrap/cache/*', 'public/storage', 'public/hot'],
     'merge_json' => ['lang/*.json'],     // translations admins edit: new keys added, theirs kept
+    'merge_php' => ['lang/*/*.php'],     // same for PHP array files (deep merge)
     'hooks' => \App\Support\UpdateHooks::class, // optional: extend LaravelUpdateHooks, e.g. DB backup
 ],
 ```

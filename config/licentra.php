@@ -48,6 +48,9 @@ return [
         // e.g. ['lang/*.json'] when admins can edit translations.
         'merge_json' => [],
 
+        // PHP files returning an array, deep-merged the same way, e.g. ['lang/*/*.php'].
+        'merge_php' => [],
+
         // Maintenance mode, migrations and cache clearing. Extend it to add a database backup.
         'hooks' => \Pacific\Licentra\Laravel\LaravelUpdateHooks::class,
     ],
