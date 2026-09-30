@@ -100,8 +100,13 @@
             let s;
             try {
                 const res = await post(@json(route('licentra.update.step')));
-                s = await res.json();
+                s = await res.json().catch(() => ({}));
                 if (res.status === 409 && s.retry) { await sleep(2000); continue; } // another step still running
+                if (!res.ok && res.status !== 409) {
+                    // Rejected before reaching the updater (demo mode, expired session, ...).
+                    show({step: 'failed', error: s.message || s.error || ('Request failed (HTTP ' + res.status + ').')});
+                    return;
+                }
             } catch (e) {
                 // Timed out or the site was briefly unavailable: see where the update got to.
                 if (++failures > 20) { show({step: 'failed', error: 'Lost contact with the site. Reload this page to see the update status.'}); return; }
@@ -117,8 +122,12 @@
     start && start.addEventListener('click', async () => {
         start.disabled = true;
         const res = await post(@json(route('licentra.update.start')), {version: start.dataset.version});
-        const s = await res.json();
-        if (!res.ok) { show(s); start.disabled = false; return; }
+        const s = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            show({step: 'failed', error: s.error || s.message || ('Request failed (HTTP ' + res.status + ').')});
+            start.disabled = false;
+            return;
+        }
         show(s);
         run();
     });

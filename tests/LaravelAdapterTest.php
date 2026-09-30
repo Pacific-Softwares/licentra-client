@@ -58,6 +58,14 @@ final class LaravelAdapterTest extends TestCase
             ->assertHeader('X-Inertia-Location', route('licentra.activate'));
     }
 
+    public function test_license_page_shows_a_flash_error_from_the_host_app(): void
+    {
+        Gate::define('manage-licentra', fn () => true);
+
+        $this->actingAs($this->user())->withSession(['error' => 'Demo mode: changes are disabled.'])
+            ->get('/license')->assertSee('Demo mode: changes are disabled.');
+    }
+
     public function test_license_page_is_denied_until_product_defines_the_gate(): void
     {
         $this->actingAs($this->user())->get('/license')->assertForbidden();

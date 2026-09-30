@@ -7,6 +7,10 @@
     @if (session('licentra_status'))
         <div class="note ok">{{ session('licentra_status') }}</div>
     @endif
+    {{-- The host app's own middleware (e.g. a demo-mode guard) may reject the form with a flash error. --}}
+    @if (session('error'))
+        <div class="note err" role="alert">{{ session('error') }}</div>
+    @endif
 
     @if ($state->isUsable())
         @if ($state->status->value === 'pending')
