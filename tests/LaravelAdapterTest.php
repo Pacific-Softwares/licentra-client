@@ -51,6 +51,13 @@ final class LaravelAdapterTest extends TestCase
         $this->actingAs($this->user())->getJson('/admin')->assertForbidden();
     }
 
+    public function test_inertia_requests_get_a_full_page_visit_to_the_license_page(): void
+    {
+        $this->actingAs($this->user())->get('/admin', ['X-Inertia' => 'true', 'X-Requested-With' => 'XMLHttpRequest'])
+            ->assertStatus(409)
+            ->assertHeader('X-Inertia-Location', route('licentra.activate'));
+    }
+
     public function test_license_page_is_denied_until_product_defines_the_gate(): void
     {
         $this->actingAs($this->user())->get('/license')->assertForbidden();

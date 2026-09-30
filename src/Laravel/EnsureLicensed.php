@@ -30,10 +30,18 @@ class EnsureLicensed
             return $next($request);
         }
 
+        $target = route(config('licentra.redirect_route'));
+
+        // Inertia (React/Vue admin panels): a plain redirect to the license page would open inside
+        // Inertia's error modal. 409 + X-Inertia-Location makes the client do a full page visit.
+        if ($request->header('X-Inertia')) {
+            return response('', 409)->header('X-Inertia-Location', $target);
+        }
+
         if ($request->expectsJson()) {
             return response()->json(['message' => $this->licentra->state()->message(), 'license' => 'required'], 403);
         }
 
-        return redirect()->route(config('licentra.redirect_route'));
+        return redirect()->to($target);
     }
 }
