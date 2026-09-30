@@ -142,6 +142,21 @@ final class LaravelUpdateTest extends TestCase
         $this->assertSame('done', $updater->status()['step']);
     }
 
+    public function test_warnings_and_markdown_changelog_are_shown(): void
+    {
+        $this->install();
+        $this->store->data['update']['changelog'] = "### Fixed\n- **Faster** bookings\n<script>alert(1)</script>";
+        $this->hooks->warnOnApply = 'Database backup failed';
+
+        $this->actingAs($this->admin())->get('/license/update')
+            ->assertSee('<h3>Fixed</h3>', false)->assertSee('<strong>Faster</strong>', false)->assertDontSee('<script>alert(1)', false);
+
+        $updater = $this->app->make(Updater::class);
+        $updater->start('1.1.0');
+        $updater->runToFinish();
+        $this->actingAs($this->admin())->get('/license/update')->assertSee('Database backup failed');
+    }
+
     public function test_starting_a_version_that_is_not_offered_is_refused(): void
     {
         $this->install();

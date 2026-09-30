@@ -242,6 +242,17 @@ final class UpdaterTest extends TestCase
         $this->assertSame('1.0.0', Manifest::read($this->base . '/' . Manifest::FILE)->version);
     }
 
+    public function test_warnings_from_hooks_survive_to_the_end(): void
+    {
+        $this->hooks->warnOnApply = 'Database backup failed';
+        $updater = $this->updater();
+        $updater->start('1.1.0');
+        $status = $updater->runToFinish();
+
+        $this->assertSame('done', $status['step']);
+        $this->assertSame(['Database backup failed'], $status['warnings']);
+    }
+
     public function test_step_after_done_keeps_done(): void
     {
         $updater = $this->updater();

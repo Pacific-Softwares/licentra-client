@@ -27,7 +27,9 @@
         .foot { margin-top:18px; font-size:13px; color:var(--muted); }
         .bar { height:8px; border-radius:99px; background:var(--line); overflow:hidden; margin:6px 0 10px; }
         .bar > span { display:block; height:100%; width:0; background:var(--accent); transition:width .4s; }
-        .changelog { white-space:pre-wrap; font-size:14px; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px 12px; max-height:220px; overflow:auto; margin:0 0 16px; }
+        .changelog { font-size:14px; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px 12px; max-height:220px; overflow:auto; margin:0 0 16px; }
+        .changelog h1, .changelog h2, .changelog h3 { font-size:14px; margin:8px 0 4px; }
+        .changelog ul { margin:0; padding-left:18px; } .changelog p { margin:4px 0; color:inherit; }
         ul.small { margin:0 0 16px; padding-left:18px; font-size:14px; color:var(--muted); }
     </style>
 </head>

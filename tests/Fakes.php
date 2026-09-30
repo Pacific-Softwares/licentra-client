@@ -115,9 +115,14 @@ final class RecordingHooks implements \Pacific\Licentra\Update\UpdateHooks
 
     public bool $failFinish = false;
 
+    public ?string $warnOnApply = null;
+
     public function beforeApply(\Pacific\Licentra\Update\Updater $updater): void
     {
         $this->calls[] = 'beforeApply';
+        if ($this->warnOnApply) {
+            $updater->warn($this->warnOnApply);
+        }
     }
 
     public function finish(\Pacific\Licentra\Update\Updater $updater): void

@@ -18,6 +18,10 @@
         Updated to version <span id="done-version">{{ $status['version'] ?? '' }}</span>.
     </div>
 
+    <div id="warnings" class="note warn" @if(empty($status['warnings'])) hidden @endif>
+        @foreach ($status['warnings'] ?? [] as $warning)<div>{{ $warning }}</div>@endforeach
+    </div>
+
     @if ($update || $inProgress)
         <dl>
             <dt>Installed</dt><dd>{{ $current }}</dd>
@@ -25,7 +29,7 @@
         </dl>
 
         @if (!empty($update['changelog']))
-            <div class="changelog">{{ $update['changelog'] }}</div>
+            <div class="changelog">{!! \Illuminate\Support\Str::markdown($update['changelog'], ['html_input' => 'strip', 'allow_unsafe_links' => false]) !!}</div>
         @endif
 
         <div id="progress" @if(!$inProgress) hidden @endif>
@@ -69,13 +73,17 @@
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
     function show(s) {
+        if (s.warnings && s.warnings.length) {
+            $('warnings').hidden = false;
+            $('warnings').replaceChildren(...s.warnings.map((w) => Object.assign(document.createElement('div'), {textContent: w})));
+        }
         if (s.progress !== undefined) $('bar').style.width = s.progress + '%';
         if (s.label) $('label').textContent = s.label + '…';
         if (s.step === 'done') {
             $('progress').hidden = true;
             $('done').hidden = false;
             $('done-version').textContent = s.version;
-            setTimeout(() => location.reload(), 1500);
+            if (!s.warnings || !s.warnings.length) setTimeout(() => location.reload(), 1500);
         }
         if (s.step === 'failed') {
             $('progress').hidden = true;

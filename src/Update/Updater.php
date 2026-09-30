@@ -180,6 +180,16 @@ final class Updater
         return $this->basePath;
     }
 
+    /** Something the admin should know that didn't stop the update, e.g. "database backup failed". */
+    public function warn(string $message): void
+    {
+        $state = $this->readState();
+        if ($state !== null) {
+            $state['warnings'] = array_values(array_unique([...($state['warnings'] ?? []), $message]));
+            $this->writeState($state);
+        }
+    }
+
     // ── Steps ────────────────────────────────────────────────────────────────
 
     private function download(array $state): string
