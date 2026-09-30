@@ -59,6 +59,22 @@ final class LaravelAdapterTest extends TestCase
         $this->actingAs($this->user())->get('/license')->assertOk()->assertSee('purchase code');
     }
 
+    public function test_license_page_asks_for_email_and_requires_it(): void
+    {
+        Gate::define('manage-licentra', fn () => true);
+
+        $this->actingAs($this->user())->get('/license')->assertOk()->assertSee('name="email"', false);
+
+        $this->actingAs($this->user())->from('/license')
+            ->post('/license', ['purchase_code' => '86781236-23d0-4b3c-7dfa-c1c147e0dece'])
+            ->assertRedirect('/license')
+            ->assertSessionHasErrors('email');
+
+        $this->actingAs($this->user())->from('/license')
+            ->post('/license', ['purchase_code' => '86781236-23d0-4b3c-7dfa-c1c147e0dece', 'email' => 'nope'])
+            ->assertSessionHasErrors('email');
+    }
+
     public function test_licensed_admin_passes_and_host_is_recorded(): void
     {
         file_put_contents(config('licentra.storage_path'), json_encode([

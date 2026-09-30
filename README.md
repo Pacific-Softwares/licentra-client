@@ -45,7 +45,7 @@ use Pacific\Licentra\Exceptions\{ActivationFailed, ServerUnreachable};
 use Pacific\Licentra\Laravel\Facades\Licentra;
 
 try {
-    $state = Licentra::activate($request->purchase_code);
+    $state = Licentra::activate($request->purchase_code, $request->email);
 } catch (ActivationFailed $e) {
     // $e->getMessage() is buyer-friendly; $e->errorCode e.g. 'activation_limit_reached'
 } catch (ServerUnreachable $e) {
@@ -66,6 +66,7 @@ $state = Licentra::state();          // offline, cheap
 $state->status;                      // Status::Valid|Pending|Missing|Expired|Invalid|DomainMismatch|Revoked|Blocked|Deactivated
 $state->isUsable();                  // Valid or Pending
 $state->message();                   // text to show the admin
+$state->buyer; $state->email;        // Envato username, contact email given at activation
 $state->supportedUntil; $state->supportEndingSoon(30); $state->renewUrl;
 $state->updateAvailable(); $state->update['version'];
 ```
@@ -84,7 +85,7 @@ $licentra = new Pacific\Licentra\Licentra(new Pacific\Licentra\Config(
     productVersion: '1.4.0',
 ));
 
-if (! $licentra->isValid()) { /* show activation form, call $licentra->activate($code) */ }
+if (! $licentra->isValid()) { /* show activation form, call $licentra->activate($code, $email) */ }
 $licentra->heartbeat(); // once a day is plenty; it no-ops if called more often
 ```
 
@@ -101,8 +102,10 @@ $licentra->heartbeat(); // once a day is plenty; it no-ops if called more often
 
 ## What gets sent
 
-Domain, app URL, product version, PHP and Laravel versions, and the server's IP (seen by the server).
-Nothing about your users. Say so in your product docs.
+On activation: the purchase code and the contact email the admin enters (Envato doesn't share
+buyer emails; it's used for license and update notices). On activation and the daily heartbeat:
+domain, app URL, product version, PHP and Laravel versions, and the server's IP (seen by the server).
+Nothing about your product's users. Say so in your product docs.
 
 ## Tests
 

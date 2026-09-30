@@ -5,7 +5,7 @@ namespace Pacific\Licentra\Laravel\Facades;
 use Illuminate\Support\Facades\Facade;
 
 /**
- * @method static \Pacific\Licentra\LicenseState activate(string $purchaseCode)
+ * @method static \Pacific\Licentra\LicenseState activate(string $purchaseCode, ?string $email = null)
  * @method static \Pacific\Licentra\LicenseState state()
  * @method static bool isValid()
  * @method static bool heartbeat(bool $force = false)

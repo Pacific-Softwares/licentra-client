@@ -18,11 +18,14 @@ class ActivationController extends Controller
 
     public function store(Request $request, Licentra $licentra)
     {
-        $request->validate(['purchase_code' => ['required', 'string', 'max:64']]);
+        $request->validate([
+            'purchase_code' => ['required', 'string', 'max:64'],
+            'email' => ['required', 'string', 'email', 'max:254'],
+        ]);
         $licentra->observeHost($request->getHost());
 
         try {
-            $state = $licentra->activate($request->string('purchase_code'));
+            $state = $licentra->activate($request->string('purchase_code'), $request->string('email'));
         } catch (ActivationFailed $e) {
             return back()->withInput()->withErrors(['purchase_code' => $e->getMessage()]);
         } catch (ServerUnreachable) {

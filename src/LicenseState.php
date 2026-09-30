@@ -15,6 +15,8 @@ final class LicenseState
         /** @var array{version: string, released_at: ?string, changelog: ?string, url: ?string}|null */
         public readonly ?array $update = null,
         public readonly ?string $currentVersion = null,
+        /** Contact email given at activation. */
+        public readonly ?string $email = null,
     ) {
     }
 

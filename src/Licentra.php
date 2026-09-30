@@ -52,15 +52,20 @@ final class Licentra
     /**
      * Activate this install. Call from your installer / "Activate license" page.
      *
+     * $email is the buyer's contact address (Envato doesn't share it). It's stored on the
+     * license server for license and update notices; pass null to send none.
+     *
      * @throws ActivationFailed  show $e->getMessage() to the buyer
      * @throws ServerUnreachable show "Could not reach the license server, try again"
      */
-    public function activate(string $purchaseCode): LicenseState
+    public function activate(string $purchaseCode, ?string $email = null): LicenseState
     {
+        $email = $email !== null ? trim($email) : '';
+
         $data = $this->request('POST', '/api/v1/activate', [
             'product' => $this->config->product,
             'purchase_code' => trim($purchaseCode),
-        ] + $this->installInfo());
+        ] + ($email !== '' ? ['email' => $email] : []) + $this->installInfo());
 
         $this->save($data);
 
@@ -162,6 +167,7 @@ final class Licentra
         $meta = [
             'licenseType' => $stored['license']['type'] ?? null,
             'buyer' => $stored['license']['buyer'] ?? null,
+            'email' => $stored['license']['email'] ?? null,
             'supportedUntil' => self::date($stored['license']['supported_until'] ?? null),
             'renewUrl' => $stored['license']['renew_url'] ?? null,
             'update' => $stored['update'] ?? null,

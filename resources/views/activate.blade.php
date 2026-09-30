@@ -41,6 +41,7 @@
         <dl>
             <dt>Status</dt><dd>Active</dd>
             <dt>Domain</dt><dd>{{ $state->domain }}</dd>
+            @if ($state->email)<dt>Contact</dt><dd>{{ $state->email }}</dd>@endif
             @if ($state->licenseType)<dt>License</dt><dd>{{ $state->licenseType }}</dd>@endif
             @if ($state->supportedUntil)
                 <dt>Support</dt>
@@ -73,6 +74,11 @@
             <input id="pc" name="purchase_code" value="{{ old('purchase_code') }}" required autofocus autocomplete="off"
                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" aria-describedby="pc-help">
             @error('purchase_code')<div class="note err" style="margin:10px 0 0" role="alert">{{ $message }}</div>@enderror
+            <label for="em" style="margin-top:14px">Email</label>
+            <input id="em" name="email" type="email" value="{{ old('email', auth()->user()?->email) }}" required autocomplete="email"
+                   placeholder="you@example.com" aria-describedby="em-help" style="font-family:inherit">
+            @error('email')<div class="note err" style="margin:10px 0 0" role="alert">{{ $message }}</div>@enderror
+            <p class="foot" id="em-help" style="margin:6px 0 0">Used only for license and update notices about this product.</p>
             <button type="submit">Activate</button>
         </form>
         <p class="foot" id="pc-help">

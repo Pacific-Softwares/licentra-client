@@ -77,6 +77,32 @@ final class LicentraTest extends TestCase
         $this->assertTrue($state->supportEndingSoon());
     }
 
+    public function test_activate_sends_contact_email_and_exposes_it(): void
+    {
+        $response = $this->okResponse();
+        $response = new Response(201, ['license' => $response->json['license'] + ['email' => 'owner@shop-one.com']] + $response->json);
+        $this->http->queue[] = $response;
+
+        $state = $this->client()->activate('code', ' owner@shop-one.com ');
+
+        $this->assertSame('owner@shop-one.com', $this->http->sent[0]['body']['email']);
+        $this->assertSame('owner@shop-one.com', $state->email);
+        $this->assertSame('happybuyer', $state->buyer);
+    }
+
+    public function test_activate_without_email_sends_none(): void
+    {
+        $this->http->queue[] = $this->okResponse();
+        $this->http->queue[] = $this->okResponse();
+
+        $this->client()->activate('code');
+        $this->client()->activate('code', '  ');
+
+        $this->assertArrayNotHasKey('email', $this->http->sent[0]['body']);
+        $this->assertArrayNotHasKey('email', $this->http->sent[1]['body']);
+        $this->assertNull($this->client()->state()->email);
+    }
+
     public function test_state_is_valid_offline_on_a_fresh_instance(): void
     {
         $this->http->queue[] = $this->okResponse();
