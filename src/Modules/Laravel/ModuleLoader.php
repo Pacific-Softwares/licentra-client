@@ -59,7 +59,16 @@ final class ModuleLoader
 
         $modules = array_filter($this->registry->all(), fn (array $m) => ($m['status'] ?? null) === Registry::ENABLED);
         if (!empty($this->config['dev'])) {
-            $modules += $this->devModules(); // an installed module wins over a dev copy of the same slug
+            foreach ($this->devModules() as $slug => $module) {
+                if (isset($modules[$slug]) || $this->registry->get($slug)) {
+                    continue; // an installed module wins over a dev copy of the same slug
+                }
+                if ($module['status'] === Registry::ENABLED) {
+                    $modules[$slug] = $module;
+                } else {
+                    $this->skipped[$slug] = 'Switched off.';
+                }
+            }
         }
 
         $paths = [];
@@ -75,6 +84,14 @@ final class ModuleLoader
             return;
         }
         $this->crashes->watch($paths, fn (string $slug, string $message) => $this->switchOff($slug, 'Crashed ' . CrashGuard::LIMIT . " times in a few minutes: {$message}"));
+
+        // Exceptions from module code anywhere in the request (its own pages, hooks it registered
+        // without the guarded helpers, middleware, jobs) are charged to that module.
+        $this->app->booted(function () {
+            $this->app->make(\Illuminate\Contracts\Debug\ExceptionHandler::class)
+                ->reportable(fn (\Throwable $e) => $this->attributeException($e));
+            $this->verifyFilament();
+        });
 
         $autoload = self::composerLoader();
         foreach ($paths as $slug => $path) {
@@ -133,6 +150,89 @@ final class ModuleLoader
         return $plugins;
     }
 
+    /**
+     * A module's code threw after it started. Errors caught by the guarded helpers ($contained)
+     * never reached the site, so the module gets ERROR_LIMIT chances; an error that broke a core
+     * page gets LIMIT. Either way only that module is switched off.
+     */
+    public function error(string $slug, \Throwable $e, string $where, bool $contained): void
+    {
+        Log::warning('licentra.module.error', [
+            'module' => $slug,
+            'where' => $where,
+            'contained' => $contained,
+            'exception' => $e::class,
+            'message' => $e->getMessage(),
+            'at' => $e->getFile() . ':' . $e->getLine(),
+        ]);
+        $this->crashes->record($slug, "{$where}: {$e->getMessage()}", null, $contained ? CrashGuard::ERROR_LIMIT : CrashGuard::LIMIT, 'errors');
+    }
+
+    /** @internal ExceptionHandler::reportable() callback */
+    public function attributeException(\Throwable $e): void
+    {
+        if (self::isExpected($e) || ($slug = $this->crashes->attributeThrowable($e)) === null) {
+            return;
+        }
+        $route = $this->app->bound('request') ? $this->app['request']->route() : null;
+        if ($route === null) {
+            $this->error($slug, $e, 'console/queue', contained: true); // its own job or command
+
+            return;
+        }
+        // On its own pages a module only hurts itself; on any other page it broke the product.
+        $ownPage = in_array('licentra.module:' . $slug, $route->gatherMiddleware(), true);
+        $this->error($slug, $e, $ownPage ? 'own page' : 'core page', contained: $ownPage);
+    }
+
+    /** 404s, validation errors, auth redirects: normal responses, not module failures. */
+    private static function isExpected(\Throwable $e): bool
+    {
+        foreach ([
+            \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface::class,
+            \Illuminate\Validation\ValidationException::class,
+            \Illuminate\Auth\AuthenticationException::class,
+            \Illuminate\Auth\Access\AuthorizationException::class,
+            \Illuminate\Database\Eloquent\ModelNotFoundException::class,
+            \Illuminate\Session\TokenMismatchException::class,
+        ] as $class) {
+            if ($e instanceof $class) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Module Filament pages/resources must live under the module's own URL slug
+     * ("{slug}/..."), so they can never replace a product page. A module that breaks the rule
+     * is switched off.
+     */
+    private function verifyFilament(): void
+    {
+        if (!class_exists(\Filament\Facades\Filament::class)) {
+            return;
+        }
+        $namespaces = [];
+        foreach ($this->loaded as $slug => $provider) {
+            $namespaces[$slug] = $provider->module()['namespace'] ?? null;
+        }
+        try {
+            foreach (\Filament\Facades\Filament::getPanels() as $panel) {
+                foreach ([...$panel->getPages(), ...$panel->getResources()] as $class) {
+                    foreach ($namespaces as $slug => $ns) {
+                        if ($ns && str_starts_with($class, $ns) && !str_starts_with($class::getSlug(), $slug . '/')) {
+                            $this->failed($slug, ModuleException::manifestInvalid("{$class} must use a URL slug starting with \"{$slug}/\" (got \"{$class::getSlug()}\")."), 'filament');
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('licentra.module.filament_check_failed', ['message' => $e->getMessage()]);
+        }
+    }
+
     /** A module threw while starting: log it with context and switch it off. */
     public function failed(string $slug, \Throwable $e, string $phase): void
     {
@@ -178,14 +278,27 @@ final class ModuleLoader
     }
 
     /** @return array<string, array> */
-    private function devModules(): array
+    /**
+     * Developer-mode modules in modules-dev/ (only when developer mode is on), switched on or off
+     * (a ".disabled" file in the module folder switches it off).
+     *
+     * @return array<string, array>
+     */
+    public function devModules(): array
     {
+        if (empty($this->config['dev'])) {
+            return [];
+        }
         $modules = [];
         foreach (glob(rtrim($this->config['dev_path'], '/') . '/*/' . ModuleManifest::FILE) ?: [] as $file) {
             $dir = dirname($file);
             try {
                 $manifest = ModuleManifest::fromFile($file);
-                $modules[$manifest->slug] = $manifest->toArray() + ['path' => $dir, 'dev' => true, 'status' => Registry::ENABLED];
+                $modules[$manifest->slug] = $manifest->toArray() + [
+                    'path' => $dir,
+                    'dev' => true,
+                    'status' => is_file($dir . '/.disabled') ? Registry::DISABLED : Registry::ENABLED,
+                ];
             } catch (ModuleException $e) {
                 $this->skipped[basename($dir)] = $e->getMessage();
             }

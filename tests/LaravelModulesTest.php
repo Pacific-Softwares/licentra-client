@@ -56,7 +56,7 @@ final class LaravelModulesTest extends TestCase
 
         // An installed module, as ModuleInstaller would have left it.
         self::$fixture = new ModuleFixture(bootModule: $env['boot']);
-        $path = self::$fixture->write(self::$tmp . '/modules/slotara-hello');
+        $path = self::$fixture->write(self::$tmp . '/modules/slotara-hello', $env['files'] ?? []);
         $manifest = json_decode(file_get_contents($path . '/module.json'), true);
         unset($manifest['manifest']);
         (new Registry(self::$tmp . '/storage/licentra-modules.php'))->put('slotara-hello', $manifest + [
@@ -66,6 +66,9 @@ final class LaravelModulesTest extends TestCase
 
         if (!empty($env['devModule'])) {
             (new ModuleFixture($env['devModule']))->write(self::$tmp . '/modules-dev/' . $env['devModule']);
+            if (!empty($env['devDisabled'])) {
+                touch(self::$tmp . '/modules-dev/' . $env['devModule'] . '/.disabled');
+            }
         }
 
         $app['config']->set('app.key', 'base64:' . base64_encode(random_bytes(32)));
@@ -264,5 +267,84 @@ final class LaravelModulesTest extends TestCase
         $this->assertNotEmpty(glob($dir . '/database/migrations/*_create_slotara_invoices_items_table.php'));
         exec(escapeshellarg(PHP_BINARY) . ' -l ' . escapeshellarg($dir . '/src/ModuleServiceProvider.php'), $out, $code);
         $this->assertSame(0, $code, implode("\n", $out));
+    }
+
+    // ── Isolation: a broken module only breaks itself ───────────────────────
+
+    private function registry(): Registry
+    {
+        return new Registry(self::$tmp . '/storage/licentra-modules.php');
+    }
+
+    public function test_a_failing_listener_never_fails_the_event_and_trips_the_module_after_repeated_errors(): void
+    {
+        $this->boot(['boot' => '$this->loadModuleRoutes(); $this->listen("booking.saved", fn () => throw new \\RuntimeException("listener boom"));']);
+        $ran = 0;
+        \Illuminate\Support\Facades\Event::listen('booking.saved', function () use (&$ran) { $ran++; });
+
+        for ($i = 0; $i < \Pacific\Licentra\Modules\CrashGuard::ERROR_LIMIT; $i++) {
+            event('booking.saved'); // must not throw
+        }
+
+        $this->assertSame(\Pacific\Licentra\Modules\CrashGuard::ERROR_LIMIT, $ran, 'the product\'s own listeners keep running');
+        $this->assertSame(Registry::DISABLED, $this->registry()->get('slotara-hello')['status']);
+        $this->assertStringContainsString('listener boom', $this->registry()->get('slotara-hello')['reason']);
+    }
+
+    public function test_a_failing_model_observer_never_stops_the_save(): void
+    {
+        $this->boot(['boot' => '$this->observe(\\Pacific\\Licentra\\Tests\\Thing::class, "created", fn () => throw new \\RuntimeException("observer boom"));']);
+        \Illuminate\Support\Facades\Schema::create('things', function ($t) {
+            $t->id();
+            $t->string('name');
+        });
+
+        $thing = Thing::create(['name' => 'a booking']);
+
+        $this->assertTrue($thing->exists, 'the product saved its record despite the module');
+        $this->assertSame(Registry::ENABLED, $this->registry()->get('slotara-hello')['status'], 'one error is not enough to switch it off');
+    }
+
+    public function test_module_routes_live_under_their_slug_and_cannot_replace_product_pages(): void
+    {
+        $this->boot(['boot' => '$this->loadModuleRoutes("routes/takeover.php");', 'files' => [
+            'routes/takeover.php' => '<?php \\Illuminate\\Support\\Facades\\Route::get("/license", fn () => "hijacked");',
+        ]]);
+
+        $this->get('/slotara-hello/license')->assertOk()->assertSee('hijacked');
+        $this->actingAs($this->admin())->get('/license')->assertOk()->assertDontSee('hijacked');
+    }
+
+    public function test_an_error_from_module_code_on_a_product_page_switches_only_that_module_off(): void
+    {
+        // A module that bypasses loadModuleRoutes() and hangs code on an unguarded product route.
+        $this->boot(['boot' => '\\Illuminate\\Support\\Facades\\Route::get("/shop", fn () => throw new \\RuntimeException("broke the shop"));']);
+
+        for ($i = 0; $i < \Pacific\Licentra\Modules\CrashGuard::LIMIT; $i++) {
+            $this->get('/shop')->assertStatus(500);
+        }
+
+        $module = $this->registry()->get('slotara-hello');
+        $this->assertSame(Registry::DISABLED, $module['status']);
+        $this->assertStringContainsString('core page', $module['reason']);
+    }
+
+    public function test_expected_http_errors_from_a_module_are_not_failures(): void
+    {
+        for ($i = 0; $i < 5; $i++) {
+            $this->get('/slotara-hello/missing')->assertNotFound();
+        }
+
+        $this->assertSame(Registry::ENABLED, $this->registry()->get('slotara-hello')['status']);
+    }
+
+    public function test_a_switched_off_dev_module_is_not_loaded(): void
+    {
+        $this->boot(['dev' => true, 'devModule' => 'slotara-devthing', 'devDisabled' => true]);
+
+        $loader = $this->app->make(ModuleLoader::class);
+        $this->assertFalse($loader->isLoaded('slotara-devthing'));
+        $this->assertSame('Switched off.', $loader->skipped()['slotara-devthing']);
+        $this->assertSame(Registry::DISABLED, $loader->devModules()['slotara-devthing']['status']);
     }
 }

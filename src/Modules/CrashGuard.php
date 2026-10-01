@@ -19,6 +19,9 @@ final class CrashGuard
 
     public const WINDOW = 600;
 
+    /** Errors a module may throw from guarded hooks or its own pages before it's switched off. */
+    public const ERROR_LIMIT = 10;
+
     private const FATAL = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR];
 
     /** @var array<string, string> slug => real module folder */
@@ -75,21 +78,24 @@ final class CrashGuard
         return null;
     }
 
-    /** Count one crash. Returns true when this crash tripped the module. */
-    public function record(string $slug, string $message, ?int $now = null): bool
+    /**
+     * Count one crash ($kind "crashes": PHP fatals) or error ("errors": exceptions). $limit of
+     * them within WINDOW seconds trips the module. Returns true when this one tripped it.
+     */
+    public function record(string $slug, string $message, ?int $now = null, int $limit = self::LIMIT, string $kind = 'crashes'): bool
     {
         $now ??= time();
         $tripped = false;
-        $this->withFile($slug, function (array $data) use ($now, &$tripped) {
-            $times = array_values(array_filter($data['crashes'] ?? [], fn ($t) => $t > $now - self::WINDOW));
+        $this->withFile($slug, function (array $data) use ($now, &$tripped, $limit, $kind) {
+            $times = array_values(array_filter($data[$kind] ?? [], fn ($t) => $t > $now - self::WINDOW));
             $times[] = $now;
-            if (count($times) >= self::LIMIT) {
+            if (count($times) >= $limit) {
                 $tripped = true;
 
-                return ['crashes' => [], 'tripped' => true, 'tripped_at' => $now];
+                return ['crashes' => [], 'errors' => [], 'tripped' => true, 'tripped_at' => $now];
             }
 
-            return ['crashes' => $times] + $data;
+            return [$kind => $times] + $data;
         });
 
         error_log("licentra: module {$slug} crashed: {$message}");
@@ -98,6 +104,21 @@ final class CrashGuard
         }
 
         return $tripped;
+    }
+
+    /** The module whose folder an exception was thrown from (its own file or any frame of its trace). */
+    public function attributeThrowable(\Throwable $e): ?string
+    {
+        if ($this->paths === []) {
+            return null;
+        }
+        foreach ([['file' => $e->getFile()], ...$e->getTrace()] as $frame) {
+            if (isset($frame['file']) && ($slug = $this->attribute($frame['file'])) !== null) {
+                return $slug;
+            }
+        }
+
+        return null;
     }
 
     /** Mark a module tripped now (it threw while starting; no need to wait for more crashes). */

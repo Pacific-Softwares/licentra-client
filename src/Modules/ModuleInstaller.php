@@ -202,6 +202,7 @@ final class ModuleInstaller
                 $target = rtrim($this->devPath, '/') . '/' . $manifest->slug;
                 self::removeDir($target);
                 self::move($this->packageRoot(), $target);
+                $this->publishAssets($manifest->slug, $target);
                 $this->runMigrations($manifest->slug, $target);
                 $this->hooks->changed();
                 $this->log('dev_uploaded', $manifest->slug, $manifest->version);
@@ -244,6 +245,45 @@ final class ModuleInstaller
 
             return $this->status();
         });
+    }
+
+    /** Developer mode: switch a modules-dev/ module on or off (a ".disabled" file in its folder). */
+    public function setDevEnabled(string $slug, bool $enabled): void
+    {
+        $this->locked(function () use ($slug, $enabled) {
+            $dir = $this->devDir($slug);
+            $enabled ? @unlink($dir . '/.disabled') : @touch($dir . '/.disabled');
+            $this->hooks->changed();
+            $this->log($enabled ? 'dev_enabled' : 'dev_disabled', $slug, null);
+        });
+    }
+
+    /** Developer mode: delete a modules-dev/ module (and, with $deleteData, roll back its tables). */
+    public function deleteDev(string $slug, bool $deleteData = false): void
+    {
+        $this->locked(function () use ($slug, $deleteData) {
+            $dir = $this->devDir($slug);
+            if ($deleteData && is_dir($dir . '/database/migrations')) {
+                $this->hooks->rollback($slug, $dir . '/database/migrations');
+            }
+            self::removeDir($dir);
+            self::removeDir($this->publicPath . '/' . $slug);
+            $this->hooks->changed();
+            $this->log($deleteData ? 'dev_deleted_with_data' : 'dev_deleted', $slug, null);
+        });
+    }
+
+    private function devDir(string $slug): string
+    {
+        if ($this->devPath === null) {
+            throw ModuleException::installFailed('Developer mode is off (LICENTRA_MODULES_DEV=true).');
+        }
+        $dir = rtrim($this->devPath, '/') . '/' . $slug;
+        if (!preg_match('/^[a-z][a-z0-9]*(-[a-z0-9]+)+$/', $slug) || !is_file($dir . '/' . ModuleManifest::FILE)) {
+            throw ModuleException::notInstalled($slug);
+        }
+
+        return $dir;
     }
 
     /** Developer mode is on (unsigned uploads go to modules-dev/). */
@@ -496,7 +536,8 @@ final class ModuleInstaller
         }
     }
 
-    private function publishAssets(string $slug, string $moduleDir): void
+    /** Copy a module's public/ files (allowlisted types only) to public/modules/{slug}. */
+    public function publishAssets(string $slug, string $moduleDir): void
     {
         $dest = $this->publicPath . '/' . $slug;
         self::removeDir($dest);

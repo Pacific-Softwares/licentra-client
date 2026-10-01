@@ -71,7 +71,11 @@ class ModuleMakeCommand extends ModuleCommand
                     public function bootModule(): void
                     {
                         \$this->loadModuleResources();   // views as "{$slug}::...", translations
-                        \$this->loadModuleRoutes();      // routes/web.php, gated per plan automatically
+                        \$this->loadModuleRoutes();      // routes/web.php under /{$slug}, gated per plan
+
+                        // Hook into the product safely (a throwing callback never breaks it), e.g.:
+                        // \$this->observe(\\App\\Models\\SomeModel::class, 'created', fn (\$model) => ...);
+                        // \$this->schedule(fn (\$s) => \$s->call(fn () => ...)->daily());
                     }
 
                     /** Filament plugins per panel id, e.g. ['admin' => [...], 'tenant' => [...]][\$panel]. */
@@ -87,7 +91,9 @@ class ModuleMakeCommand extends ModuleCommand
 
                 use Illuminate\\Support\\Facades\\Route;
 
-                Route::get('/{$slug}', fn () => view('{$slug}::index'))->name('{$slug}.index');
+                // Served at /{$slug} and named "{$slug}.index": loadModuleRoutes() adds the
+                // /{$slug} prefix and the "{$slug}." name prefix to everything in this file.
+                Route::get('/', fn () => view('{$slug}::index'))->name('index');
 
                 PHP,
             'resources/views/index.blade.php' => "<h1>" . Str::headline($name) . "</h1>\n<p>The {$slug} module is running.</p>\n",

@@ -378,4 +378,35 @@ final class ModuleInstallerTest extends TestCase
         $this->installer(devPath: $this->tmp . '/modules-dev')
             ->installDev((new ModuleFixture('slotara-custom', manifest: ['requires' => ['product' => '^3.0']]))->zip($this->tmp)['path']);
     }
+
+    public function test_developer_mode_modules_can_be_switched_off_on_and_deleted(): void
+    {
+        $dev = $this->tmp . '/modules-dev';
+        $installer = $this->installer(devPath: $dev);
+        $installer->installDev((new ModuleFixture('slotara-custom'))->zip($this->tmp)['path']);
+
+        $installer->setDevEnabled('slotara-custom', false);
+        $this->assertFileExists($dev . '/slotara-custom/.disabled');
+        $installer->setDevEnabled('slotara-custom', true);
+        $this->assertFileDoesNotExist($dev . '/slotara-custom/.disabled');
+
+        $installer->deleteDev('slotara-custom', deleteData: true);
+        $this->assertDirectoryDoesNotExist($dev . '/slotara-custom');
+        $this->assertDirectoryDoesNotExist($this->tmp . '/public/modules/slotara-custom');
+        $this->assertContains('rollback', $this->hooks->names());
+    }
+
+    public function test_developer_mode_actions_refuse_paths_and_unknown_modules(): void
+    {
+        $installer = $this->installer(devPath: $this->tmp . '/modules-dev');
+
+        foreach (['../storage', 'slotara-nope'] as $slug) {
+            try {
+                $installer->deleteDev($slug);
+                $this->fail("{$slug} should be refused");
+            } catch (ModuleException $e) {
+                $this->assertSame('not_installed', $e->reason);
+            }
+        }
+    }
 }

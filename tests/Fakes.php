@@ -200,7 +200,8 @@ final class ModuleFixture
                 class ModuleServiceProvider extends \Pacific\Licentra\Modules\Laravel\ModuleServiceProvider {
                     public function bootModule(): void { ' . $this->bootModule . ' }
                 }',
-            'routes/web.php' => '<?php \Illuminate\Support\Facades\Route::get("/' . $this->slug . '", fn () => "hello from ' . $this->slug . '");',
+            // loadModuleRoutes() prefixes everything with /{slug}: this is GET /{slug}.
+            'routes/web.php' => '<?php \Illuminate\Support\Facades\Route::get("/", fn () => "hello from ' . $this->slug . '");',
             'database/migrations/2026_10_01_000000_create_hello.php' => '<?php return new class extends \Illuminate\Database\Migrations\Migration { public function up(): void {} };',
             'public/app.css' => 'body{}',
             'public/shell.php' => '<?php echo "pwned";',
@@ -228,4 +229,12 @@ final class ModuleFixture
 
         return ['path' => $zipPath, 'sha256' => hash_file('sha256', $zipPath)];
     }
+}
+
+/** A product model for module observer tests. */
+class Thing extends \Illuminate\Database\Eloquent\Model
+{
+    public $timestamps = false;
+
+    protected $guarded = [];
 }

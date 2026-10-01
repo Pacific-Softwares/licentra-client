@@ -149,8 +149,10 @@ and add `modules/*`, `modules-dev/*` and `public/modules/*` to `update.preserve`
 **Writing a module**: `php artisan module:make invoices` creates `modules-dev/{product}-invoices/`.
 With `LICENTRA_MODULES_DEV=true` in `.env` it loads straight away (unsigned, with a banner). The
 provider extends `Pacific\Licentra\Modules\Laravel\ModuleServiceProvider`. Use `loadModuleRoutes()`
-(routes get the `licentra.module:{slug}` middleware: 404 when the module is off, 403 for tenants
-whose plan lacks it) and the `GatedByModule` trait on Filament resources/pages. Modules can't ship a
+(routes are placed under `/{slug}`, named `{slug}.*`, and get the `licentra.module:{slug}` middleware:
+404 when the module is off, 403 for tenants whose plan lacks it) and the `GatedByModule` trait plus a
+`{slug}/...` slug on Filament resources/pages. Hook into the product with `observe()`, `listen()`,
+`composer()` and `schedule()`: a callback that throws never fails the product's own action. Modules can't ship a
 `vendor/` folder. Ship it: create the add-on product in Licentra (slug `{product}-{name}`, "Add-on for"
 the product), then `vendor/bin/licentra-release module modules-dev/{slug} --upload` and publish.
 That also writes `{slug}-{version}.licentra-module.zip`, a signed offline package buyers can install
@@ -159,8 +161,10 @@ developer mode, Upload module also accepts a plain unsigned module zip and puts 
 
 **Safety**
 - Only zips signed with your release key install; a dropped-in folder in `modules/` never loads.
-- A module that throws while starting, or causes 3 PHP fatals in 10 minutes, is switched off with
-  the reason shown on the Modules page. The rest of the site keeps working.
+- A broken module only breaks itself. It's switched off, with the reason shown on the Modules page,
+  when it throws while starting, causes 3 PHP fatals in 10 minutes, throws 3 errors on a product page,
+  or throws 10 errors in 10 minutes from its own pages, jobs or guarded hooks. Errors are charged to a
+  module by the files in their stack trace.
 - Site broken anyway? `LICENTRA_MODULES_SAFE=true` in `.env` loads no modules (then
   `php artisan config:clear` if config is cached), or run `php artisan module:disable --all`.
   If your product publishes a `modules` array, include the `dev` and `safe_mode` keys from this

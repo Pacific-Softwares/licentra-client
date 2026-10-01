@@ -10,7 +10,7 @@ class ModuleMigrateCommand extends ModuleCommand
 {
     protected $signature = 'module:migrate {slug}';
 
-    protected $description = 'Run a module\'s migrations (retry after a failure, or a developer-mode module)';
+    protected $description = 'Run a module\'s migrations (retry after a failure); for a developer-mode module also publish its public/ files';
 
     public function handle(ModuleInstaller $installer, Registry $registry, ModuleHooks $hooks): int
     {
@@ -25,6 +25,7 @@ class ModuleMigrateCommand extends ModuleCommand
                     throw new \Pacific\Licentra\Exceptions\LicentraException("No installed module {$slug}, and no {$dir}.");
                 }
                 $hooks->migrate($slug, $dir);
+                $installer->publishAssets($slug, dirname($dir, 2)); // public/ → public/modules/{slug}
             }
             $this->info("Migrations for {$slug} are up to date.");
         });
