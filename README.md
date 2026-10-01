@@ -158,8 +158,10 @@ the product), then `vendor/bin/licentra-release module modules-dev/{slug} --uplo
 - Only zips signed with your release key install; a dropped-in folder in `modules/` never loads.
 - A module that throws while starting, or causes 3 PHP fatals in 10 minutes, is switched off with
   the reason shown on the Modules page. The rest of the site keeps working.
-- Site broken anyway? `LICENTRA_MODULES_SAFE=true` in `.env` loads no modules, or run
-  `php artisan module:disable --all`.
+- Site broken anyway? `LICENTRA_MODULES_SAFE=true` in `.env` loads no modules (then
+  `php artisan config:clear` if config is cached), or run `php artisan module:disable --all`.
+  If your product publishes a `modules` array, include the `dev` and `safe_mode` keys from this
+  package's config/licentra.php so these `.env` switches keep working.
 - Refunded add-on: admin banner for 7 days, then off (data kept). Install, enable and uninstall
   ask for the admin's password and are logged to `storage/logs/licentra-modules.log`.
 - Module installs and product updates never run at the same time.

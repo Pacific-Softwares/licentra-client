@@ -100,6 +100,12 @@ final class ModuleLoader
         return isset($this->loaded[$slug]);
     }
 
+    /** A running module's record (manifest fields incl. plan_feature), or null. */
+    public function module(string $slug): ?array
+    {
+        return isset($this->loaded[$slug]) ? $this->loaded[$slug]->module() : null;
+    }
+
     /** @return array<string, ModuleServiceProvider> */
     public function loaded(): array
     {

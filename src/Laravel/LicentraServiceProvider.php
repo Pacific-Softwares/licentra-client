@@ -79,9 +79,11 @@ class LicentraServiceProvider extends ServiceProvider
             'work_path' => storage_path('app/licentra-modules-op'),
             'crash_path' => storage_path('app/licentra-crashes'),
             'audit_log' => storage_path('logs/licentra-modules.log'),
-            'dev' => false,
+            // Fallbacks for products whose published config has a 'modules' array without these
+            // keys. Products should list them in config/licentra.php so they survive config:cache.
+            'dev' => (bool) env('LICENTRA_MODULES_DEV', false),
             'dev_path' => base_path('modules-dev'),
-            'safe_mode' => false,
+            'safe_mode' => (bool) env('LICENTRA_MODULES_SAFE', false),
             'tenant_gate' => \Pacific\Licentra\Modules\Laravel\AllowAllTenants::class,
             'back_url' => null,
         ], (array) config('licentra.modules', []));

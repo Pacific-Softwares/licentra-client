@@ -29,6 +29,12 @@ abstract class ModuleServiceProvider extends ServiceProvider
         $this->module = $module;
     }
 
+    /** The module's registry record (manifest fields, path, status). */
+    public function module(): array
+    {
+        return $this->module;
+    }
+
     public function slug(): string
     {
         return $this->module['slug'];
