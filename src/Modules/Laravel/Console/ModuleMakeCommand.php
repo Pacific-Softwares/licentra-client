@@ -65,7 +65,7 @@ class ModuleMakeCommand extends ModuleCommand
                     public function register(): void
                     {
                         // Container bindings only. Use the product's documented extension points
-                        // (docs/modules.md), not its internals: those may change in any update.
+                        // (its module documentation), not its internals: those may change in any update.
                     }
 
                     public function bootModule(): void
