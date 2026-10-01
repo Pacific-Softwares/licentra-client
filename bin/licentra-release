@@ -9,11 +9,15 @@
  *   licentra-release manifest <dir> --version=X   write <dir>/.licentra-manifest.json (before zipping)
  *   licentra-release sign <zip> --product=P --version=X
  *   licentra-release upload <zip> --product=P --version=X [--changelog=FILE] [--server=URL] [--chunk-mb=5]
+ *   licentra-release module <dir> [--upload] [--changelog=FILE] [--server=URL]
+ *                                                 validate module.json, zip, sign (and upload) an add-on module
  *
  * Key file:     $LICENTRA_RELEASE_KEY or ~/.config/licentra/release.key
  * Upload token: $LICENTRA_UPLOAD_TOKEN or ~/.config/licentra/upload-token
  */
 
+use Pacific\Licentra\Modules\ModuleException;
+use Pacific\Licentra\Modules\ModuleManifest;
 use Pacific\Licentra\Update\Manifest;
 use Pacific\Licentra\Update\ReleaseSignature;
 
@@ -96,6 +100,51 @@ function request(string $method, string $url, string $token, string $body, strin
     return [$status, json_decode((string) $raw, true) ?? ['message' => substr((string) $raw, 0, 300)]];
 }
 
+function upload(string $zip, string $product, string $version, array $args): void
+{
+    is_file($zip) || fail("{$zip} not found.");
+    function_exists('curl_init') || fail('The curl PHP extension is required for uploads.');
+    $server = rtrim(option($args, 'server', 'https://licentra.pacificsoftwares.com'), '/');
+    $chunkBytes = (int) (((float) option($args, 'chunk-mb', '5')) * 1024 * 1024);
+    $changelogFile = option($args, 'changelog');
+    $token = uploadToken();
+
+    $sha = hash_file('sha256', $zip);
+    $signature = ReleaseSignature::sign(secretKey(), $product, $version, $sha);
+    $size = filesize($zip);
+    $chunks = max(1, (int) ceil($size / $chunkBytes));
+    echo "Uploading {$product} {$version} (" . round($size / 1048576, 1) . " MB, {$chunks} chunks) to {$server}\n";
+
+    $in = fopen($zip, 'rb');
+    for ($i = 0; $i < $chunks; $i++) {
+        $bytes = fread($in, $chunkBytes);
+        for ($try = 1; ; $try++) {
+            [$status, $json] = request('PUT', "{$server}/api/v1/releases/{$product}/{$version}/chunks/{$i}", $token, $bytes, 'application/octet-stream');
+            if ($status === 200) {
+                break;
+            }
+            if ($try >= 3 || $status < 500) {
+                fail("Chunk {$i} failed (HTTP {$status}): " . ($json['message'] ?? ''));
+            }
+            sleep(2);
+        }
+        printf("\r  %d/%d chunks", $i + 1, $chunks);
+    }
+    fclose($in);
+    echo "\n";
+
+    $payload = json_encode([
+        'chunks' => $chunks,
+        'sha256' => $sha,
+        'signature' => $signature,
+        'changelog' => $changelogFile ? (string) file_get_contents($changelogFile) : null,
+    ]);
+    [$status, $json] = request('POST', "{$server}/api/v1/releases/{$product}/{$version}", $token, $payload, 'application/json');
+    $status === 201 || fail("Finishing the upload failed (HTTP {$status}): " . ($json['message'] ?? json_encode($json)));
+
+    echo "✓ Uploaded as a draft. Publish it in {$server}/admin/releases\n";
+}
+
 $command = $argv[1] ?? 'help';
 $args = array_slice($argv, 2);
 $positional = array_values(array_filter($args, fn ($a) => !str_starts_with($a, '--')));
@@ -138,49 +187,49 @@ switch ($command) {
 
     case 'upload':
         $zip = $positional[0] ?? fail('Usage: licentra-release upload <zip> --product=P --version=X');
-        is_file($zip) || fail("{$zip} not found.");
-        function_exists('curl_init') || fail('The curl PHP extension is required for uploads.');
-        $product = required($args, 'product');
-        $version = required($args, 'version');
-        $server = rtrim(option($args, 'server', 'https://licentra.pacificsoftwares.com'), '/');
-        $chunkBytes = (int) (((float) option($args, 'chunk-mb', '5')) * 1024 * 1024);
-        $changelogFile = option($args, 'changelog');
-        $token = uploadToken();
+        upload($zip, required($args, 'product'), required($args, 'version'), $args);
+        break;
 
-        $sha = hash_file('sha256', $zip);
-        $signature = ReleaseSignature::sign(secretKey(), $product, $version, $sha);
-        $size = filesize($zip);
-        $chunks = (int) ceil($size / $chunkBytes);
-        echo "Uploading {$product} {$version} (" . round($size / 1048576, 1) . " MB, {$chunks} chunks) to {$server}\n";
-
-        $in = fopen($zip, 'rb');
-        for ($i = 0; $i < $chunks; $i++) {
-            $bytes = fread($in, $chunkBytes);
-            for ($try = 1; ; $try++) {
-                [$status, $json] = request('PUT', "{$server}/api/v1/releases/{$product}/{$version}/chunks/{$i}", $token, $bytes, 'application/octet-stream');
-                if ($status === 200) {
-                    break;
-                }
-                if ($try >= 3 || $status < 500) {
-                    fail("Chunk {$i} failed (HTTP {$status}): " . ($json['message'] ?? ''));
-                }
-                sleep(2);
-            }
-            printf("\r  %d/%d chunks", $i + 1, $chunks);
+    case 'module':
+        $dir = rtrim($positional[0] ?? fail('Usage: licentra-release module <dir> [--upload]'), '/');
+        is_dir($dir) || fail("{$dir} is not a directory.");
+        class_exists(\ZipArchive::class) || fail('The zip PHP extension is required.');
+        try {
+            $module = ModuleManifest::fromFile($dir . '/' . ModuleManifest::FILE);
+        } catch (ModuleException $e) {
+            fail($e->getMessage());
         }
-        fclose($in);
-        echo "\n";
+        is_dir($dir . '/vendor') && fail('Modules can\'t ship a vendor/ folder; use the product\'s packages.');
+        is_file($dir . '/src/' . str_replace('\\', '/', substr($module->provider, strlen($module->namespace))) . '.php')
+            || fail("{$module->provider} not found under src/.");
 
-        $payload = json_encode([
-            'chunks' => $chunks,
-            'sha256' => $sha,
-            'signature' => $signature,
-            'changelog' => $changelogFile ? (string) file_get_contents($changelogFile) : null,
-        ]);
-        [$status, $json] = request('POST', "{$server}/api/v1/releases/{$product}/{$version}", $token, $payload, 'application/json');
-        $status === 201 || fail("Finishing the upload failed (HTTP {$status}): " . ($json['message'] ?? json_encode($json)));
+        $zip = getcwd() . "/{$module->slug}-{$module->version}.zip";
+        @unlink($zip);
+        $archive = new ZipArchive();
+        $archive->open($zip, ZipArchive::CREATE) === true || fail("Cannot create {$zip}.");
+        $files = 0;
+        $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS));
+        foreach ($it as $file) {
+            $rel = str_replace('\\', '/', substr($file->getPathname(), strlen($dir) + 1));
+            if (!$file->isFile() || preg_match('#(^|/)(\.git|node_modules|\.DS_Store|\.idea)(/|$)#', $rel)) {
+                continue;
+            }
+            $archive->addFile($file->getPathname(), "{$module->slug}/{$rel}");
+            $files++;
+        }
+        $archive->close();
+        $sha = hash_file('sha256', $zip);
+        echo "{$module->slug} {$module->version}: {$files} files → {$zip}\n";
 
-        echo "✓ Uploaded as a draft. Publish it in {$server}/admin/releases\n";
+        if (in_array('--upload', $args, true)) {
+            upload($zip, $module->slug, $module->version, $args);
+        } else {
+            echo json_encode([
+                'sha256' => $sha,
+                'signature' => ReleaseSignature::sign(secretKey(), $module->slug, $module->version, $sha),
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+            echo "Add --upload to send it to the license server (create the add-on product there first, slug {$module->slug}).\n";
+        }
         break;
 
     default:
@@ -188,6 +237,7 @@ switch ($command) {
         licentra-release keygen | pubkey | manifest <dir> --version=X
                          | sign <zip> --product=P --version=X
                          | upload <zip> --product=P --version=X [--changelog=FILE] [--server=URL] [--chunk-mb=5]
+                         | module <dir> [--upload] [--changelog=FILE] [--server=URL]
 
         TXT;
 }

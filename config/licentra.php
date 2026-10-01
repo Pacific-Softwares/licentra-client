@@ -37,6 +37,36 @@ return [
     'redirect_route' => 'licentra.activate',
 
     // One-click updates from /{route_prefix}/update (or `php artisan licentra:update`).
+    /*
+     * Add-on modules: signed add-ons installed from the license server into modules/{slug}.
+     * Off until the product sets 'enabled' => true. Keys you leave out keep these defaults.
+     */
+    'modules' => [
+        'enabled' => false,
+        'path' => base_path('modules'),
+        'public_path' => public_path('modules'),
+        'registry' => storage_path('app/licentra-modules.php'),
+        'work_path' => storage_path('app/licentra-modules-op'),
+        'crash_path' => storage_path('app/licentra-crashes'),
+        'audit_log' => storage_path('logs/licentra-modules.log'),
+
+        // Developer mode: also load unsigned modules from modules-dev/. Only ever from .env.
+        'dev' => (bool) env('LICENTRA_MODULES_DEV', false),
+        'dev_path' => base_path('modules-dev'),
+
+        // Emergency switch when a module breaks the site: LICENTRA_MODULES_SAFE=true loads none.
+        'safe_mode' => (bool) env('LICENTRA_MODULES_SAFE', false),
+
+        // Multi-tenant products: a class implementing Modules\Laravel\TenantGate (plan gating).
+        'tenant_gate' => \Pacific\Licentra\Modules\Laravel\AllowAllTenants::class,
+
+        // Admin nav link back to the product, shown on the Modules page.
+        'back_url' => null,
+    ],
+
+    // One lock for product updates and module installs, so they never interleave.
+    'operation_lock' => storage_path('app/licentra-operation.lock'),
+
     'update' => [
         // Downloads, unpacked release and the backup of replaced files.
         'work_path' => storage_path('app/licentra-update'),

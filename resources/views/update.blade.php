@@ -60,17 +60,11 @@
     <p class="foot"><a href="{{ route('licentra.activate') }}">← License</a></p>
 </main>
 
+@include('licentra::partials.steps')
 <script>
 (() => {
-    const token = document.querySelector('meta[name=csrf-token]').content;
     const $ = (id) => document.getElementById(id);
-    const post = (url, body) => fetch(url, {
-        method: 'POST',
-        headers: {'X-CSRF-TOKEN': token, 'Accept': 'application/json', 'Content-Type': 'application/json'},
-        body: JSON.stringify(body || {}),
-        credentials: 'same-origin',
-    });
-    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const {post} = window.licentraSteps;
 
     function show(s) {
         if (s.warnings && s.warnings.length) {
@@ -92,30 +86,14 @@
         }
     }
 
-    async function run() {
+    function run() {
         $('intro') && ($('intro').hidden = true);
         $('progress').hidden = false;
-        let failures = 0;
-        for (;;) {
-            let s;
-            try {
-                const res = await post(@json(route('licentra.update.step')));
-                s = await res.json().catch(() => ({}));
-                if (res.status === 409 && s.retry) { await sleep(2000); continue; } // another step still running
-                if (!res.ok && res.status !== 409) {
-                    // Rejected before reaching the updater (demo mode, expired session, ...).
-                    show({step: 'failed', error: s.message || s.error || ('Request failed (HTTP ' + res.status + ').')});
-                    return;
-                }
-            } catch (e) {
-                // Timed out or the site was briefly unavailable: see where the update got to.
-                if (++failures > 20) { show({step: 'failed', error: 'Lost contact with the site. Reload this page to see the update status.'}); return; }
-                await sleep(3000);
-                try { s = await (await fetch(@json(route('licentra.update.status')), {credentials: 'same-origin'})).json(); } catch (_) { continue; }
-            }
-            show(s);
-            if (s.step === 'done' || s.step === 'failed') return;
-        }
+        return window.licentraSteps.run({
+            stepUrl: @json(route('licentra.update.step')),
+            statusUrl: @json(route('licentra.update.status')),
+            onStatus: show,
+        });
     }
 
     const start = $('start');

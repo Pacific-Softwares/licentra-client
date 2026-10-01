@@ -43,6 +43,10 @@ final class Updater
         private readonly array $mergeJson = [],
         /** @var list<string> PHP files returning an array, deep-merged the same way, e.g. "lang/{locale}/{file}.php" patterns */
         private readonly array $mergePhp = [],
+        /** Lock file shared with the module installer; defaults to one inside $workPath. */
+        private readonly ?string $lockPath = null,
+        /** @var (\Closure(): bool)|null true while a module install is unfinished */
+        private readonly ?\Closure $otherOperationRunning = null,
     ) {
     }
 
@@ -85,8 +89,16 @@ final class Updater
 
     public function start(string $version): array
     {
+        return $this->locked(fn () => $this->startLocked($version));
+    }
+
+    private function startLocked(string $version): array
+    {
         if ($this->inProgress()) {
             throw new UpdateFailed('An update is already in progress.');
+        }
+        if ($this->otherOperationRunning && ($this->otherOperationRunning)()) {
+            throw new UpdateFailed('A module is being installed. Wait for it to finish, then update.');
         }
         $update = $this->available();
         if ($update === null || $update['version'] !== $version) {
@@ -606,8 +618,15 @@ final class Updater
     private function locked(callable $fn): mixed
     {
         $this->ensureWorkDir();
-        $lock = fopen($this->workPath . '/update.lock', 'c');
+        $lockPath = $this->lockPath ?? $this->workPath . '/update.lock';
+        if (!is_dir(dirname($lockPath))) {
+            @mkdir(dirname($lockPath), 0775, true);
+        }
+        $lock = @fopen($lockPath, 'c');
         if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) {
+            if ($lock) {
+                fclose($lock);
+            }
             throw new UpdateFailed('Another update step is running. Wait a moment.');
         }
         try {

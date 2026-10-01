@@ -120,6 +120,53 @@ check. How an update runs:
 Any failure while swapping files or migrating puts the old files back and leaves maintenance mode.
 Updates require a valid license, never active support: Envato buyers get updates for life.
 
+## Add-on modules
+
+Sell add-ons for a product as separate CodeCanyon items. Buyers install them from **Admin → Modules**
+(`/license/modules`): pick the add-on, paste its purchase code, done. No FTP, SSH or Composer.
+
+```
+ Modules page ─start(slug, code)─▶ server: activate add-on on this install (parent) ─▶ signed zip
+   download ─▶ verify (signature covers slug + version + sha256) ─▶ extract + check module.json
+   ─▶ swap into modules/{slug} ─▶ migrate (by path, never via the app's own migrate) ─▶ enabled
+ Every request: ModuleLoader loads enabled, licensed, compatible modules before the app's providers.
+ Daily heartbeat: add-on tokens refresh with the product's own (one request per install).
+```
+
+Turn it on in the product's `config/licentra.php`:
+
+```php
+'modules' => [
+    'enabled' => true,
+    'tenant_gate' => \App\Support\ModuleTenantGate::class, // multi-tenant products only
+],
+```
+
+and add `modules/*`, `modules-dev/*` and `public/modules/*` to `update.preserve`. Link to
+`route('licentra.modules')` from your admin. Filament panels take module plugins with
+`->plugins(app(\Pacific\Licentra\Modules\Laravel\ModuleLoader::class)->filamentPlugins('admin'))`.
+
+**Writing a module**: `php artisan module:make invoices` creates `modules-dev/{product}-invoices/`.
+With `LICENTRA_MODULES_DEV=true` in `.env` it loads straight away (unsigned, with a banner). The
+provider extends `Pacific\Licentra\Modules\Laravel\ModuleServiceProvider`. Use `loadModuleRoutes()`
+(routes get the `licentra.module:{slug}` middleware: 404 when the module is off, 403 for tenants
+whose plan lacks it) and the `GatedByModule` trait on Filament resources/pages. Modules can't ship a
+`vendor/` folder. Ship it: create the add-on product in Licentra (slug `{product}-{name}`, "Add-on for"
+the product), then `vendor/bin/licentra-release module modules-dev/{slug} --upload` and publish.
+
+**Safety**
+- Only zips signed with your release key install; a dropped-in folder in `modules/` never loads.
+- A module that throws while starting, or causes 3 PHP fatals in 10 minutes, is switched off with
+  the reason shown on the Modules page. The rest of the site keeps working.
+- Site broken anyway? `LICENTRA_MODULES_SAFE=true` in `.env` loads no modules, or run
+  `php artisan module:disable --all`.
+- Refunded add-on: admin banner for 7 days, then off (data kept). Install, enable and uninstall
+  ask for the admin's password and are logged to `storage/logs/licentra-modules.log`.
+- Module installs and product updates never run at the same time.
+
+Commands: `module:list`, `module:install {slug} --code=`, `module:enable`, `module:disable [--all]`,
+`module:uninstall [--delete-data]`, `module:migrate`, `module:reset-crashes`, `module:make`.
+
 ## Plain PHP
 
 ```php

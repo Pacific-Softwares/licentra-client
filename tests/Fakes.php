@@ -138,3 +138,94 @@ final class RecordingHooks implements \Pacific\Licentra\Update\UpdateHooks
         $this->calls[] = 'afterRollback';
     }
 }
+
+/** Records module hook calls; can be told to fail migrations. */
+final class RecordingModuleHooks implements \Pacific\Licentra\Modules\ModuleHooks
+{
+    public array $calls = [];
+
+    public ?string $failMigrate = null;
+
+    public function migrate(string $slug, string $migrationsPath): void
+    {
+        $this->calls[] = ['migrate', $slug, $migrationsPath];
+        if ($this->failMigrate) {
+            throw new \RuntimeException($this->failMigrate);
+        }
+    }
+
+    public function rollback(string $slug, string $migrationsPath): void
+    {
+        $this->calls[] = ['rollback', $slug, $migrationsPath];
+    }
+
+    public function changed(): void
+    {
+        $this->calls[] = ['changed'];
+    }
+
+    public function names(): array
+    {
+        return array_column($this->calls, 0);
+    }
+}
+
+/**
+ * Writes a module folder (module.json, provider, route, migration, public assets) and can zip
+ * it like `licentra-release module` does. Every fixture gets its own PHP namespace, because
+ * tests share one process and a class can only be declared once.
+ */
+final class ModuleFixture
+{
+    public readonly string $namespace;
+
+    public function __construct(
+        public readonly string $slug = 'slotara-hello',
+        public readonly string $version = '1.0.0',
+        public array $manifest = [],
+        public string $bootModule = '$this->loadModuleRoutes();',
+    ) {
+        $this->namespace = 'Modules\\Fx' . bin2hex(random_bytes(5)) . '\\';
+    }
+
+    public function write(string $dir, array $extraFiles = []): string
+    {
+        $files = [
+            'module.json' => json_encode($this->manifest + [
+                'manifest' => 1, 'slug' => $this->slug, 'name' => 'Hello', 'version' => $this->version,
+                'product' => explode('-', $this->slug)[0], 'requires' => ['product' => '^2.0'],
+                'namespace' => $this->namespace, 'provider' => $this->namespace . 'ModuleServiceProvider',
+            ]),
+            'src/ModuleServiceProvider.php' => '<?php namespace ' . rtrim($this->namespace, '\\') . ';
+                class ModuleServiceProvider extends \Pacific\Licentra\Modules\Laravel\ModuleServiceProvider {
+                    public function bootModule(): void { ' . $this->bootModule . ' }
+                }',
+            'routes/web.php' => '<?php \Illuminate\Support\Facades\Route::get("/' . $this->slug . '", fn () => "hello from ' . $this->slug . '");',
+            'database/migrations/2026_10_01_000000_create_hello.php' => '<?php return new class extends \Illuminate\Database\Migrations\Migration { public function up(): void {} };',
+            'public/app.css' => 'body{}',
+            'public/shell.php' => '<?php echo "pwned";',
+        ] + $extraFiles;
+        foreach ($files as $path => $content) {
+            @mkdir(dirname($dir . '/' . $path), 0777, true);
+            file_put_contents($dir . '/' . $path, $content);
+        }
+
+        return $dir;
+    }
+
+    /** @return array{path: string, sha256: string} */
+    public function zip(string $tmp, array $extraFiles = []): array
+    {
+        $src = $this->write($tmp . '/src-' . bin2hex(random_bytes(3)), $extraFiles);
+        $zipPath = $tmp . '/' . $this->slug . '-' . $this->version . '-' . bin2hex(random_bytes(3)) . '.zip';
+        $zip = new \ZipArchive();
+        $zip->open($zipPath, \ZipArchive::CREATE);
+        $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($src, \FilesystemIterator::SKIP_DOTS));
+        foreach ($it as $file) {
+            $zip->addFile($file->getPathname(), $this->slug . '/' . substr($file->getPathname(), strlen($src) + 1));
+        }
+        $zip->close();
+
+        return ['path' => $zipPath, 'sha256' => hash_file('sha256', $zipPath)];
+    }
+}

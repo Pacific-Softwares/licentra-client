@@ -40,6 +40,8 @@ final class Licentra
     private readonly Downloader $downloader;
     private readonly TokenVerifier $verifier;
     private ?LicenseState $cached = null;
+    /** @var (\Closure(array): void)|null receives the heartbeat's "modules" block */
+    private ?\Closure $onModules = null;
 
     public function __construct(
         private readonly Config $config,
@@ -124,6 +126,13 @@ final class Licentra
         try {
             $data = $this->request('POST', '/api/v1/heartbeat', ['instance_id' => $stored['instance_id']] + $this->installInfo());
             $this->save($data);
+            if ($this->onModules !== null && is_array($data['modules'] ?? null)) {
+                try {
+                    ($this->onModules)($data['modules']);
+                } catch (LicentraException) {
+                    // unwritable module list: the product license was still refreshed
+                }
+            }
 
             return true;
         } catch (ActivationFailed $e) {
@@ -179,9 +188,64 @@ final class Licentra
             throw new ActivationFailed('not_activated', 'Activate this installation before updating it.');
         }
 
+        $this->download($stored['instance_id'], $version, $destination, $timeout);
+    }
+
+    /** This install's id on the license server, or null before activation. Add-on tokens name it as their parent. */
+    public function instanceId(): ?string
+    {
+        return $this->store->read()['instance_id'] ?? null;
+    }
+
+    /**
+     * Activate an add-on module on this install. $purchaseCode is null for free add-ons.
+     * Returns the server's response (instance_id, token, update, license); the caller stores it.
+     *
+     * @throws ActivationFailed|ServerUnreachable
+     */
+    public function activateAddon(string $slug, ?string $purchaseCode): array
+    {
+        $parent = $this->instanceId() ?? throw new ActivationFailed('not_activated', 'Activate the product before installing add-ons.');
+        $code = $purchaseCode !== null ? trim($purchaseCode) : '';
+
+        return $this->request('POST', '/api/v1/activate', [
+            'product' => $slug,
+            'parent_instance_id' => $parent,
+        ] + ($code !== '' ? ['purchase_code' => $code] : []) + $this->installInfo());
+    }
+
+    /**
+     * Download a published add-on release. $moduleInstanceId is the add-on's own activation, so the
+     * server checks that add-on's license (and this install's) before sending the file.
+     *
+     * @throws ActivationFailed|ServerUnreachable
+     */
+    public function downloadModule(string $moduleInstanceId, string $version, string $destination, int $timeout = 600): void
+    {
+        $this->download($moduleInstanceId, $version, $destination, $timeout);
+    }
+
+    /**
+     * Add-ons published for this product (name, slug, pricing, latest version), for the Modules page.
+     *
+     * @throws ActivationFailed|ServerUnreachable
+     */
+    public function addons(): array
+    {
+        return $this->request('GET', '/api/v1/products/' . rawurlencode($this->config->product) . '/addons')['addons'] ?? [];
+    }
+
+    /** Called with the "modules" block of every successful heartbeat (the Laravel adapter wires the module registry here). */
+    public function onModules(\Closure $listener): void
+    {
+        $this->onModules = $listener;
+    }
+
+    private function download(string $instanceId, string $version, string $destination, int $timeout): void
+    {
         $res = $this->downloader->download(
             rtrim($this->config->serverUrl, '/') . '/api/v1/updates/download',
-            ['instance_id' => $stored['instance_id'], 'version' => $version] + $this->installInfo(),
+            ['instance_id' => $instanceId, 'version' => $version] + $this->installInfo(),
             $destination,
             $timeout,
         );
