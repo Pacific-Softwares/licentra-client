@@ -10,7 +10,8 @@
  *   licentra-release sign <zip> --product=P --version=X
  *   licentra-release upload <zip> --product=P --version=X [--changelog=FILE] [--server=URL] [--chunk-mb=5]
  *   licentra-release module <dir> [--upload] [--changelog=FILE] [--server=URL]
- *                                                 validate module.json, zip, sign (and upload) an add-on module
+ *                                                 validate module.json, zip, sign (and upload) an add-on module;
+ *                                                 also writes {slug}-{version}.licentra-module.zip for manual installs
  *
  * Key file:     $LICENTRA_RELEASE_KEY or ~/.config/licentra/release.key
  * Upload token: $LICENTRA_UPLOAD_TOKEN or ~/.config/licentra/upload-token
@@ -18,6 +19,7 @@
 
 use Pacific\Licentra\Modules\ModuleException;
 use Pacific\Licentra\Modules\ModuleManifest;
+use Pacific\Licentra\Modules\ModulePackage;
 use Pacific\Licentra\Update\Manifest;
 use Pacific\Licentra\Update\ReleaseSignature;
 
@@ -219,15 +221,17 @@ switch ($command) {
         }
         $archive->close();
         $sha = hash_file('sha256', $zip);
+        $signature = ReleaseSignature::sign(secretKey(), $module->slug, $module->version, $sha);
         echo "{$module->slug} {$module->version}: {$files} files → {$zip}\n";
+
+        // Offline package for "Upload module" on the Modules page (same signature as downloads).
+        $package = getcwd() . "/{$module->slug}-{$module->version}" . ModulePackage::SUFFIX;
+        ModulePackage::build($zip, $module->slug, $module->version, $sha, $signature, $package);
+        echo "Offline package (for Upload module) → {$package}\n";
 
         if (in_array('--upload', $args, true)) {
             upload($zip, $module->slug, $module->version, $args);
         } else {
-            echo json_encode([
-                'sha256' => $sha,
-                'signature' => ReleaseSignature::sign(secretKey(), $module->slug, $module->version, $sha),
-            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
             echo "Add --upload to send it to the license server (create the add-on product there first, slug {$module->slug}).\n";
         }
         break;

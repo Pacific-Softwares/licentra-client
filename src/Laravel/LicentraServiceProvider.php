@@ -111,6 +111,7 @@ class LicentraServiceProvider extends ServiceProvider
             (string) $app['config']['licentra.product_version'],
             fn () => $app->make(Updater::class)->inProgress(),
             fn (string $action, string $slug, ?string $version) => $this->audit($m('audit_log'), $action, $slug, $version),
+            $m('dev') ? $m('dev_path') : null,
         ));
         $this->app->singleton(ModuleLoader::class, fn ($app) => new ModuleLoader(
             $app,

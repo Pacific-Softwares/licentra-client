@@ -11,6 +11,7 @@ use Pacific\Licentra\Update\ReleaseSignature;
  * runs long on shared hosting (the Modules page polls step() like the Update page does).
  *
  *   start(slug, code) ─ activate add-on on the server (or reuse it for updates) ─▶ state.json
+ *   startFromPackage(upload, code) ─ unpack a signed .licentra-module.zip, activate ─▶ (skips download)
  *     download ─▶ verify ─▶ extract ─▶ swap ─▶ migrate ─▶ finish ─▶ done
  *       zip       sha256 +   to work/   old folder   module      registry: enabled,
  *                 signature  new/, read aside, new   migrations  caches cleared
@@ -54,6 +55,8 @@ final class ModuleInstaller
         private readonly ?\Closure $productUpdateRunning = null,
         /** @var (\Closure(string $action, string $slug, ?string $version): void)|null */
         private readonly ?\Closure $audit = null,
+        /** modules-dev/ when developer mode is on (unsigned uploads allowed), otherwise null. */
+        private readonly ?string $devPath = null,
     ) {
     }
 
@@ -116,6 +119,100 @@ final class ModuleInstaller
         });
     }
 
+    /**
+     * Begin installing an uploaded offline package (ModulePackage). It goes through the same
+     * signature check as a download, and the add-on is activated on the license server the
+     * same way, so a paid add-on still needs its purchase code.
+     *
+     * @throws ModuleException|\Pacific\Licentra\Exceptions\ActivationFailed|\Pacific\Licentra\Exceptions\ServerUnreachable
+     */
+    public function startFromPackage(string $uploadedFile, ?string $purchaseCode = null): array
+    {
+        if (!$this->releasePublicKey) {
+            throw ModuleException::installFailed('This product has no release key configured, so it can\'t verify modules.');
+        }
+
+        return $this->locked(function () use ($uploadedFile, $purchaseCode) {
+            if ($this->inProgress() || ($this->productUpdateRunning && ($this->productUpdateRunning)())) {
+                throw ModuleException::busy();
+            }
+            $this->cleanWorkDir();
+            $meta = ModulePackage::open($uploadedFile, $this->workPath . '/module.zip');
+            $installed = $this->registry->get($meta['slug']);
+            if (!empty($installed['dev'])) {
+                throw ModuleException::installFailed("{$meta['slug']} is a developer-mode module.");
+            }
+            if ($installed && version_compare($meta['version'], (string) $installed['version'], '<')) {
+                @unlink($this->workPath . '/module.zip');
+                throw ModuleException::downgrade($meta['slug'], (string) $installed['version'], $meta['version']);
+            }
+
+            $code = $purchaseCode !== null && trim($purchaseCode) !== '' ? trim($purchaseCode) : null;
+            $activation = $code === null && !empty($installed['instance_id'])
+                ? ['instance_id' => $installed['instance_id'], 'token' => $installed['token'] ?? null]
+                : $this->licentra->activateAddon($meta['slug'], $code);
+
+            $this->writeState([
+                'step' => 'verify',
+                'source' => 'upload',
+                'slug' => $meta['slug'],
+                'version' => $meta['version'],
+                'from' => $installed['version'] ?? null,
+                'sha256' => $meta['sha256'],
+                'signature' => $meta['signature'],
+                'instance_id' => $activation['instance_id'],
+                'token' => $activation['token'] ?? null,
+                'license_status' => $activation['status'] ?? ($installed['license_status'] ?? 'valid'),
+                'started_at' => time(),
+            ]);
+            $this->log('upload_started', $meta['slug'], $meta['version']);
+
+            return $this->status();
+        });
+    }
+
+    /**
+     * Developer mode only: put an unsigned module zip (your own custom module) into modules-dev/,
+     * replacing an older copy, and run its migrations. It's never licensed or verified; the
+     * Modules page marks it "Unsigned".
+     *
+     * @return string the module slug
+     */
+    public function installDev(string $zipFile): string
+    {
+        if ($this->devPath === null) {
+            throw ModuleException::installFailed('Unsigned modules can only be uploaded in developer mode (LICENTRA_MODULES_DEV=true).');
+        }
+
+        return $this->locked(function () use ($zipFile) {
+            if ($this->inProgress() || ($this->productUpdateRunning && ($this->productUpdateRunning)())) {
+                throw ModuleException::busy();
+            }
+            $this->cleanWorkDir();
+            $this->ensureDir($this->workPath);
+            if (!@copy($zipFile, $this->workPath . '/module.zip')) {
+                throw ModuleException::installFailed('Could not read the uploaded file.');
+            }
+            try {
+                $this->extract(['slug' => null, 'version' => null]);
+                $manifest = ModuleManifest::fromFile($this->packageRoot() . '/' . ModuleManifest::FILE);
+                if ($this->registry->get($manifest->slug)) {
+                    throw ModuleException::installFailed("{$manifest->slug} is already installed as a signed module.");
+                }
+                $target = rtrim($this->devPath, '/') . '/' . $manifest->slug;
+                self::removeDir($target);
+                self::move($this->packageRoot(), $target);
+                $this->runMigrations($manifest->slug, $target);
+                $this->hooks->changed();
+                $this->log('dev_uploaded', $manifest->slug, $manifest->version);
+
+                return $manifest->slug;
+            } finally {
+                $this->cleanWorkDir();
+            }
+        });
+    }
+
     /** Run the next step. On failure the status has step "failed" and an error. */
     public function step(): array
     {
@@ -147,6 +244,12 @@ final class ModuleInstaller
 
             return $this->status();
         });
+    }
+
+    /** Developer mode is on (unsigned uploads go to modules-dev/). */
+    public function devMode(): bool
+    {
+        return $this->devPath !== null;
     }
 
     /** Run every remaining step (CLI). */
@@ -303,7 +406,7 @@ final class ModuleInstaller
 
         $root = $this->packageRoot();
         $manifest = ModuleManifest::fromFile($root . '/' . ModuleManifest::FILE);
-        if ($manifest->slug !== $state['slug'] || $manifest->version !== $state['version']) {
+        if ($state['slug'] !== null && ($manifest->slug !== $state['slug'] || $manifest->version !== $state['version'])) {
             throw ModuleException::manifestInvalid("expected {$state['slug']} {$state['version']}, the package is {$manifest->slug} {$manifest->version}.");
         }
         $manifest->assertCompatible($this->licentra->config()->product, $this->hostVersion);

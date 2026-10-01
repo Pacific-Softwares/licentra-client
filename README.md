@@ -153,6 +153,9 @@ provider extends `Pacific\Licentra\Modules\Laravel\ModuleServiceProvider`. Use `
 whose plan lacks it) and the `GatedByModule` trait on Filament resources/pages. Modules can't ship a
 `vendor/` folder. Ship it: create the add-on product in Licentra (slug `{product}-{name}`, "Add-on for"
 the product), then `vendor/bin/licentra-release module modules-dev/{slug} --upload` and publish.
+That also writes `{slug}-{version}.licentra-module.zip`, a signed offline package buyers can install
+with **Upload module** (same signature check; paid add-ons still need their purchase code). In
+developer mode, Upload module also accepts a plain unsigned module zip and puts it in `modules-dev/`.
 
 **Safety**
 - Only zips signed with your release key install; a dropped-in folder in `modules/` never loads.

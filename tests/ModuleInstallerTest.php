@@ -52,7 +52,7 @@ final class ModuleInstallerTest extends TestCase
         exec('rm -rf ' . escapeshellarg($this->tmp));
     }
 
-    private function installer(?string $releaseKey = null): ModuleInstaller
+    private function installer(?string $releaseKey = null, ?string $devPath = null): ModuleInstaller
     {
         return new ModuleInstaller(
             $this->licentra, $this->registry, $this->hooks,
@@ -62,6 +62,7 @@ final class ModuleInstallerTest extends TestCase
             function (string $action, string $slug, ?string $version) {
                 $this->audit[] = "{$action} {$slug} {$version}";
             },
+            $devPath,
         );
     }
 
@@ -296,5 +297,85 @@ final class ModuleInstallerTest extends TestCase
 
         $this->expectExceptionMessage('no published release');
         $this->installer()->start('slotara-hello', 'code');
+    }
+
+    // ── Upload ──────────────────────────────────────────────────────────────
+
+    /** A signed offline package, as `licentra-release module` writes it. */
+    private function package(ModuleFixture $fx, ?string $signVersion = null): string
+    {
+        $zip = $fx->zip($this->tmp);
+        $out = $this->tmp . '/' . $fx->slug . '-' . $fx->version . \Pacific\Licentra\Modules\ModulePackage::SUFFIX;
+        \Pacific\Licentra\Modules\ModulePackage::build($zip['path'], $fx->slug, $fx->version, $zip['sha256'],
+            ReleaseSignature::sign($this->releaseKey['secret'], $fx->slug, $signVersion ?? $fx->version, $zip['sha256']), $out);
+
+        return $out;
+    }
+
+    private function queueActivation(string $slug): void
+    {
+        $this->http->queue[] = new Response(201, ['ok' => true, 'instance_id' => 'mod-iid', 'status' => 'valid',
+            'token' => $this->signer->token(['product' => $slug, 'iid' => 'mod-iid', 'parent' => 'parent-iid', 'domain' => 'shop.com']), 'update' => null]);
+    }
+
+    public function test_uploaded_signed_package_installs_without_downloading(): void
+    {
+        $this->queueActivation('slotara-hello');
+        $installer = $this->installer();
+
+        $installer->startFromPackage($this->package(new ModuleFixture()), 'code');
+        $status = $installer->runToEnd();
+
+        $this->assertSame('done', $status['step']);
+        $this->assertSame([], $this->downloader->sent, 'nothing is downloaded for an upload');
+        $this->assertSame('slotara-hello', $this->http->sent[0]['body']['product'], 'the add-on is still activated (licensed)');
+        $this->assertSame(Registry::ENABLED, $this->registry->get('slotara-hello')['status']);
+    }
+
+    public function test_uploaded_package_with_a_wrong_signature_installs_nothing(): void
+    {
+        $this->queueActivation('slotara-hello');
+        $installer = $this->installer();
+
+        $installer->startFromPackage($this->package(new ModuleFixture(), signVersion: '9.9.9'), 'code');
+        $status = $installer->runToEnd();
+
+        $this->assertSame('failed', $status['step']);
+        $this->assertStringContainsString('signature', $status['error']);
+        $this->assertDirectoryDoesNotExist($this->tmp . '/modules/slotara-hello');
+    }
+
+    public function test_a_plain_zip_is_not_accepted_as_a_signed_package(): void
+    {
+        $this->expectExceptionMessage('not a signed module package');
+
+        $this->installer()->startFromPackage((new ModuleFixture())->zip($this->tmp)['path'], 'code');
+    }
+
+    public function test_unsigned_upload_needs_developer_mode(): void
+    {
+        $this->expectExceptionMessage('developer mode');
+
+        $this->installer()->installDev((new ModuleFixture())->zip($this->tmp)['path']);
+    }
+
+    public function test_developer_mode_upload_goes_to_modules_dev_and_migrates(): void
+    {
+        $dev = $this->tmp . '/modules-dev';
+
+        $slug = $this->installer(devPath: $dev)->installDev((new ModuleFixture('slotara-custom'))->zip($this->tmp)['path']);
+
+        $this->assertSame('slotara-custom', $slug);
+        $this->assertFileExists($dev . '/slotara-custom/module.json');
+        $this->assertContains('migrate', $this->hooks->names());
+        $this->assertNull($this->registry->get('slotara-custom'), 'unsigned modules never enter the registry');
+    }
+
+    public function test_developer_mode_upload_still_refuses_incompatible_modules(): void
+    {
+        $this->expectExceptionMessage('needs slotara ^3.0');
+
+        $this->installer(devPath: $this->tmp . '/modules-dev')
+            ->installDev((new ModuleFixture('slotara-custom', manifest: ['requires' => ['product' => '^3.0']]))->zip($this->tmp)['path']);
     }
 }
